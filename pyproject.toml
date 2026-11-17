@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aetheris-microbrains"
+version = "0.2.0"
+description = "Zero-GPU analytical micro-transformer coprocessor and cognitive engine for autonomous AI agents"
+readme = "README.md"
+authors = [
+    { name = "Dmitry Tikov", email = "drtikov@gmail.com" }
+]
+license = { text = "PolyForm Noncommercial License 1.0.0" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = [
+    "ai-agents",
+    "micro-transformer",
+    "mixture-of-experts",
+    "edge-ai",
+    "conformal-prediction",
+    "vector-symbolic-architecture",
+    "opencl",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.22.0",
+]
+
+[project.optional-dependencies]
+opencl = [
+    "pyopencl>=2022.1",
+]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/drtikov/aetheris-microbrains"
+Repository = "https://github.com/drtikov/aetheris-microbrains.git"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aetheris_microbrains*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.npz", "*.md"]

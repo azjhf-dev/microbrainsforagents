@@ -1,0 +1,616 @@
+"""
+Analytical Micro-Transformer Brain & Logic Compiler
+===================================================
+Inspired by 2025-2026 SOTA research:
+- Loom / Analytically Derived Transformer Weights (Mehmet Kerem Türkcan, 2026)
+- Sesen AI / Hand-Crafted Exact Matrix Computation
+- MIT CSAIL Weight-Space Programming (Zero-Shot Neural Synthesis)
+
+Enables Aetheris to construct, grow, and run fully functional micro-transformer
+neural networks ("digital neuro-organs") directly in CPU RAM using NumPy,
+WITHOUT gradient descent, training loops, backpropagation, or NVIDIA GPUs.
+
+Architecture:
+- Embedding & Positional Encoding: Rotary (RoPE) / sinusoidal in exact coordinates.
+- Multi-Head Attention: Exact analytical Key-Query inner products:
+      Attention(Q, K, V) = Softmax( (X W_Q) (X W_K)^T / sqrt(d_k) ) (X W_V)
+- Multi-Layer Perceptron (MLP): Exact Key-Value Associative Memory blocks
+  compiled directly from symbolic logic tables, routing rules, or ROME rank-1 grafts.
+- Zero-Shot Policy Execution: Forward pass runs in <1 millisecond on ordinary CPU.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+import numpy as np
+
+_PKG_STORE_DIR = Path(__file__).resolve().parents[1] / "memory" / "store" / "neuro_brains"
+_CWD_STORE_DIR = Path("memory/store/neuro_brains")
+CANONICAL_STORE_DIRS: List[Path] = [
+    _PKG_STORE_DIR,
+    _CWD_STORE_DIR,
+]
+STORE_DIR = _PKG_STORE_DIR if _PKG_STORE_DIR.exists() else (_CWD_STORE_DIR if _CWD_STORE_DIR.exists() else _PKG_STORE_DIR)
+
+
+class AnalyticalMicroTransformer:
+    """
+    A standalone, pure-NumPy micro-transformer whose parameters are compiled
+    analytically from logic specifications rather than trained with gradient descent.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        d_model: int = 64,
+        n_heads: int = 2,
+        d_mlp: int = 128,
+        max_seq_len: int = 16,
+        seed: int = 42,
+    ):
+        self.name = name
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.d_head = d_model // n_heads
+        self.d_mlp = d_mlp
+        self.max_seq_len = max_seq_len
+
+        rng = np.random.default_rng(seed)
+
+        # 1. Attention Projections (W_Q, W_K, W_V, W_O)
+        self.W_Q = np.zeros((d_model, d_model), dtype=np.float32)
+        self.W_K = np.zeros((d_model, d_model), dtype=np.float32)
+        self.W_V = np.eye(d_model, dtype=np.float32)
+        self.W_O = np.eye(d_model, dtype=np.float32)
+        self.induction_heads: List[int] = []
+
+        # 2. MLP Down/Up Projections (Feed-Forward Associative Memory)
+        self.W_up = np.zeros((d_model, d_mlp), dtype=np.float32)
+        self.W_down = np.zeros((d_mlp, d_model), dtype=np.float32)
+        self.b_up = np.zeros(d_mlp, dtype=np.float32)
+        self.b_down = np.zeros(d_model, dtype=np.float32)
+        # Post-MLP output projection evolved by EGGROLL / DNS in BrainNursery
+        self.W_mlp: Optional[np.ndarray] = np.eye(d_model, dtype=np.float32)
+
+        # 3. Vocabulary / Token Coordinate Dictionary
+        self.vocab: Dict[str, int] = {"<pad>": 0, "<unk>": 1, "<eos>": 2}
+        self.inv_vocab: Dict[int, str] = {0: "<pad>", 1: "<unk>", 2: "<eos>"}
+        self.W_embed = np.zeros((d_model, d_model), dtype=np.float32)
+        self._init_orthogonal_embeddings()
+
+        # 4. Proposal 8: Collision-Free Modern Hopfield Associative Memory & Kuramoto Phase Bank
+        self.hopfield_keys: List[np.ndarray] = []
+        self.hopfield_values: List[np.ndarray] = []
+
+        # 5. Proposal 5: Split-Conformal Prediction & Calibrated Abstention
+        self.conformal_quantile: Optional[float] = None
+        self.conformal_alpha: float = 0.10
+        self.conformal_scores: List[float] = []
+        # How the current conformal_quantile was obtained — honest provenance
+        # for the quantile, which otherwise looks calibrated no matter what.
+        self.conformal_basis: str = "uncalibrated"
+
+    def _init_orthogonal_embeddings(self):
+        """Initialize distinct orthogonal basis directions for vocabulary using Gram-Schmidt QR."""
+        rng = np.random.default_rng(1337)
+        # Generate square orthogonal matrix: Q @ Q.T = I
+        H = rng.standard_normal((self.d_model, self.d_model)).astype(np.float32)
+        Q, _ = np.linalg.qr(H)
+        self.W_embed = Q.astype(np.float32)
+
+    def register_token(self, token: str) -> int:
+        if token not in self.vocab:
+            idx = len(self.vocab)
+            if idx >= len(self.W_embed):
+                # Expand embedding table dynamically while preserving existing token embeddings
+                rng = np.random.default_rng(1337 + idx)
+                extra = rng.standard_normal((32, self.d_model)).astype(np.float32)
+                extra /= (np.linalg.norm(extra, axis=-1, keepdims=True) + 1e-12)
+                self.W_embed = np.vstack([self.W_embed, extra]).astype(np.float32)
+            self.vocab[token] = idx
+            self.inv_vocab[idx] = token
+            return idx
+        return self.vocab[token]
+
+    def embed_token(self, token: str) -> np.ndarray:
+        """Return the d_model embedding vector for `token` (or <unk>)."""
+        idx = self.vocab.get(str(token), 1)
+        if idx >= len(self.W_embed):
+            idx = 1
+        return self.W_embed[idx].copy()
+
+    def compile_induction_head(self, head_idx: int = 0, copy_strength: float = 2.5):
+        """
+        Surgically sets W_Q and W_K for a specific head so it forms an exact
+        Induction Head: attends from current token to previous occurrences of that token
+        and copies the subsequent token into the residual stream.
+        Zero gradient descent — pure analytical matrix synthesis.
+        """
+        start = head_idx * self.d_head
+        end = start + self.d_head
+        # Set W_Q and W_K to identical identity projections in this head's subspace
+        self.W_Q[start:end, start:end] = np.eye(self.d_head, dtype=np.float32) * copy_strength
+        self.W_K[start:end, start:end] = np.eye(self.d_head, dtype=np.float32) * copy_strength
+        self.W_V[start:end, start:end] = np.eye(self.d_head, dtype=np.float32)
+        if int(head_idx) not in self.induction_heads:
+            self.induction_heads.append(int(head_idx))
+
+    def compile_logic_association(self, trigger_token: str, target_output_token: str, binding_gain: float = 5.0):
+        """
+        Compiles an exact IF (trigger) -> THEN (target) rule directly into the MLP weights.
+        Assigns dedicated, orthogonal neuron slots so associations don't interfere:
+            W_up[:, neuron_idx] = key_vec * binding_gain
+            W_down[neuron_idx, :] = target_vec * binding_gain
+        """
+        k_idx = self.register_token(trigger_token)
+        v_idx = self.register_token(target_output_token)
+
+        k_vec = self.W_embed[k_idx]
+        v_vec = self.W_embed[v_idx]
+
+        # Use deterministic neuron index dedicated to this key
+        neuron_idx = k_idx % self.d_mlp
+
+        # Set neuron weight to trigger strongly on key_vec
+        self.W_up[:, neuron_idx] = k_vec * binding_gain
+        self.b_up[neuron_idx] = -0.1  # Fire only when dot-product is positive and strong
+
+        # Output target embedding vector with strong gain
+        self.W_down[neuron_idx, :] = v_vec * binding_gain
+
+        # Proposal 8: Also store in collision-free Modern Hopfield memory bank (deduplicating identical keys)
+        k_norm = float(np.linalg.norm(k_vec)) + 1e-12
+        existing_idx: Optional[int] = None
+        for idx, hk in enumerate(self.hopfield_keys):
+            cos_sim = float(np.dot(hk, k_vec) / ((float(np.linalg.norm(hk)) + 1e-12) * k_norm))
+            if cos_sim > 0.999:
+                existing_idx = idx
+                break
+        if existing_idx is not None:
+            self.hopfield_values[existing_idx] = (v_vec * binding_gain).copy()
+        else:
+            self.hopfield_keys.append(k_vec.copy())
+            self.hopfield_values.append((v_vec * binding_gain).copy())
+
+    def forward(self, input_tokens: List[str]) -> Dict[str, Any]:
+        """
+        Executes a complete causal transformer forward pass on CPU:
+        Input tokens -> Embedding -> Multi-Head Self Attention -> MLP -> Logits
+        """
+        seq_len = min(len(input_tokens), self.max_seq_len)
+        if seq_len == 0:
+            # No work was performed — a fabricated confidence 1.0 here made an
+            # empty call look like a perfect prediction.
+            return {"predicted_token": "<eos>", "confidence": 0.0, "reason": "empty_input_no_work_performed"}
+
+        # 1. Embedding lookup
+        x = np.zeros((seq_len, self.d_model), dtype=np.float32)
+        for t, tok in enumerate(input_tokens[-seq_len:]):
+            idx = self.vocab.get(tok, 1)  # 1 is <unk>
+            x[t] = self.W_embed[idx]
+
+        # Add positional encoding (scaled appropriately to not overwhelm semantic embedding)
+        if seq_len > 1:
+            pos = np.arange(seq_len)[:, np.newaxis]
+            i = np.arange(self.d_model)[np.newaxis, :]
+            angle_rates = 1.0 / np.power(10000, (2 * (i // 2)) / np.float32(self.d_model))
+            pos_encoding = np.zeros_like(x)
+            pos_encoding[:, 0::2] = np.sin(pos * angle_rates[:, 0::2]) * 0.1
+            pos_encoding[:, 1::2] = np.cos(pos * angle_rates[:, 1::2]) * 0.1
+            x = x + pos_encoding
+
+        # 2. Multi-Head Self Attention (with Causal Mask)
+        Q = np.matmul(x, self.W_Q)  # (seq_len, d_model)
+        K = np.matmul(x, self.W_K)
+        V = np.matmul(x, self.W_V)
+
+        # Scaled Dot-Product Multi-Head Self Attention
+        scale = 1.0 / math.sqrt(max(1, self.d_head))
+        mask = np.triu(np.ones((seq_len, seq_len), dtype=np.float32), k=1) * -1e9
+        attn_concat = np.zeros((seq_len, self.d_model), dtype=np.float32)
+        induction_set = set(getattr(self, "induction_heads", []))
+
+        for h in range(self.n_heads):
+            start = h * self.d_head
+            end = (h + 1) * self.d_head
+            Q_h = Q[:, start:end]
+            K_h = K[:, start:end]
+            V_h = V[:, start:end]
+
+            if h in induction_set and seq_len >= 2:
+                K_h_eff = np.zeros_like(K_h)
+                K_h_eff[0] = K_h[0]
+                K_h_eff[1:] = K_h[:-1]
+                diag_pen = np.eye(seq_len, dtype=np.float32) * -2.5
+                diag_pen[0, 0] = 0.0
+            else:
+                K_h_eff = K_h
+                diag_pen = 0.0
+
+            attn_scores_h = np.matmul(Q_h, K_h_eff.T) * scale + mask + diag_pen
+            exp_scores_h = np.exp(attn_scores_h - np.max(attn_scores_h, axis=-1, keepdims=True))
+            attn_weights_h = exp_scores_h / (np.sum(exp_scores_h, axis=-1, keepdims=True) + 1e-12)
+            attn_concat[:, start:end] = np.matmul(attn_weights_h, V_h)
+
+        attn_out = np.matmul(attn_concat, self.W_O)
+
+        # Residual connection + LayerNorm approximation
+        x = x + attn_out
+        x = x / (np.std(x, axis=-1, keepdims=True) + 1e-6)
+
+        # 3. MLP (Feed-Forward)
+        mlp_h = np.maximum(0, np.matmul(x, self.W_up) + self.b_up)  # ReLU
+        mlp_out = np.matmul(mlp_h, self.W_down) + self.b_down
+        if isinstance(self.W_mlp, np.ndarray) and self.W_mlp.shape == (self.d_model, self.d_model):
+            mlp_out = np.matmul(mlp_out, self.W_mlp)
+
+        # Residual connection
+        x = x + mlp_out
+        last_hidden = x[-1]  # Output vector of the newest token (d_model,)
+
+        # 4. Predict Next Token via Embedding Cosine Similarity
+        norms = np.linalg.norm(self.W_embed[:len(self.vocab)], axis=-1) + 1e-12
+        h_norm = np.linalg.norm(last_hidden) + 1e-12
+        sims = np.dot(self.W_embed[:len(self.vocab)], last_hidden) / (norms * h_norm)
+
+        best_idx = int(np.argmax(sims))
+        best_token = self.inv_vocab.get(best_idx, "<unk>")
+        confidence = float(round(float(sims[best_idx]), 4))
+
+        return {
+            "predicted_token": best_token,
+            "confidence": confidence,
+            "seq_len": seq_len,
+            "last_hidden_norm": float(round(h_norm, 4)),
+            "model_name": self.name,
+        }
+
+    def forward_kuramoto_hopfield(
+        self,
+        input_tokens: List[str],
+        sync_steps: int = 8,
+        beta: float = 12.0,
+        force_gpu: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Proposal 8: Kuramoto Oscillatory Phase-Synchronized Attention (AKOrN / KoPE)
+        + Modern Hopfield LogSumExp Dense Associative Memory on the GT 710 OpenCL GPU.
+        Eliminates modulo `k_idx % d_mlp` rule collisions and binds multi-token context via phase locking.
+        """
+        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+
+        seq_len = min(len(input_tokens), self.max_seq_len)
+        if seq_len == 0:
+            # Nothing ran: confidence 1.0 / order parameter 1.0 fabricated a
+            # perfect-synchronization measurement for zero work.
+            return {
+                "predicted_token": "<eos>",
+                "confidence": 0.0,
+                "kuramoto_order_r": 0.0,
+                "reason": "empty_input_no_work_performed",
+                "backend": "CPU",
+            }
+
+        x = np.zeros((seq_len, self.d_model), dtype=np.float32)
+        for t, tok in enumerate(input_tokens[-seq_len:]):
+            idx = self.vocab.get(tok, 1)
+            x[t] = self.W_embed[idx]
+
+        # Compute symmetric positive coupling matrix J from token similarity + induction attention
+        sim_mat = np.matmul(x, x.T)
+        coupling_J = np.maximum(0.0, sim_mat) / float(max(1, seq_len))
+
+        # Initialize natural frequencies omega and slight phase offsets per token position
+        pos_offsets = np.linspace(0.0, 0.35, seq_len, dtype=np.float32)[:, None]
+        phases = np.broadcast_to(pos_offsets, (seq_len, self.d_model)).copy()
+        omega = np.full((seq_len, self.d_model), 0.05, dtype=np.float32)
+
+        hk = np.stack(self.hopfield_keys, axis=0) if self.hopfield_keys else np.zeros((0, self.d_model), dtype=np.float32)
+        hv = np.stack(self.hopfield_values, axis=0) if self.hopfield_values else np.zeros((0, self.d_model), dtype=np.float32)
+
+        acc = get_opencl_accelerator()
+        kh_res = acc.kuramoto_hopfield_attention(
+            x_in=x,
+            phases=phases,
+            omega=omega,
+            coupling_J=coupling_J,
+            hopfield_K=hk,
+            hopfield_V=hv,
+            sync_steps=sync_steps,
+            dt=0.2,
+            beta=beta,
+            force_gpu=force_gpu,
+        )
+
+        y_out = kh_res["output"]
+        last_hidden = y_out[-1]
+        norms = np.linalg.norm(self.W_embed[: len(self.vocab)], axis=-1) + 1e-12
+        h_norm = np.linalg.norm(last_hidden) + 1e-12
+        sims = np.dot(self.W_embed[: len(self.vocab)], last_hidden) / (norms * h_norm)
+
+        best_idx = int(np.argmax(sims))
+        best_token = self.inv_vocab.get(best_idx, "<unk>")
+        confidence = float(round(float(sims[best_idx]), 4))
+
+        return {
+            "predicted_token": best_token,
+            "confidence": confidence,
+            "kuramoto_order_r": kh_res["kuramoto_order_r"],
+            "hopfield_rules_count": len(self.hopfield_keys),
+            "backend": kh_res["backend"],
+            "model_name": self.name,
+        }
+
+    # ------------------------------------------------------------------
+    # Split-Conformal Prediction & Calibrated Abstention
+    # ------------------------------------------------------------------
+    def get_token_probabilities(self, input_tokens: List[str], beta: float = 8.0) -> Dict[str, float]:
+        """Compute softmax probability distribution over vocabulary from Kuramoto-Hopfield readout."""
+        x = np.stack([self.embed_token(t) for t in input_tokens], axis=0) if input_tokens else np.zeros((1, self.d_model), dtype=np.float32)
+        seq_len = x.shape[0]
+        pos_offsets = np.linspace(0.0, 0.35, seq_len, dtype=np.float32)[:, None]
+        phases = np.broadcast_to(pos_offsets, (seq_len, self.d_model)).copy()
+        omega = np.full((seq_len, self.d_model), 0.05, dtype=np.float32)
+        sim_mat = np.matmul(x, x.T)
+        coupling_J = np.maximum(0.0, sim_mat) / float(max(1, seq_len))
+        hk = np.stack(self.hopfield_keys, axis=0) if self.hopfield_keys else np.zeros((0, self.d_model), dtype=np.float32)
+        hv = np.stack(self.hopfield_values, axis=0) if self.hopfield_values else np.zeros((0, self.d_model), dtype=np.float32)
+
+        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        acc = get_opencl_accelerator()
+        kh_res = acc.kuramoto_hopfield_attention(
+            x_in=x, phases=phases, omega=omega, coupling_J=coupling_J,
+            hopfield_K=hk, hopfield_V=hv, sync_steps=8, dt=0.2, beta=beta,
+        )
+        last_hidden = kh_res["output"][-1]
+        n_vocab = len(self.vocab)
+        norms = np.linalg.norm(self.W_embed[:n_vocab], axis=-1) + 1e-12
+        h_norm = np.linalg.norm(last_hidden) + 1e-12
+        sims = np.dot(self.W_embed[:n_vocab], last_hidden) / (norms * h_norm)
+
+        logits = sims * 8.0
+        logits -= np.max(logits)
+        exp_logits = np.exp(np.clip(logits, -40.0, 0.0))
+        probs = exp_logits / (np.sum(exp_logits) + 1e-12)
+        return {self.inv_vocab[i]: float(probs[i]) for i in range(n_vocab) if i in self.inv_vocab}
+
+    def calibrate_conformal(
+        self,
+        calibration_data: List[Tuple[List[str], str]],
+        alpha: float = 0.10,
+        in_sample: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Calibrate split-conformal prediction threshold q_hat at miscoverage level alpha.
+        The finite-sample coverage guarantee P(y* in C(x)) >= 1 - alpha holds ONLY
+        for exchangeable held-out calibration data — an in-sample calibration
+        (calibrating on the model's own compiled rules) provides no such guarantee
+        and is recorded as such via `basis`.
+        """
+        if not calibration_data:
+            return {"status": "error", "reason": "empty_calibration_data"}
+
+        scores: List[float] = []
+        for inp, target in calibration_data:
+            probs = self.get_token_probabilities(inp)
+            p_target = float(probs.get(target, 0.0))
+            s_i = 1.0 - p_target
+            scores.append(float(s_i))
+
+        n = len(scores)
+        q_level = min(1.0, math.ceil((n + 1) * (1.0 - float(alpha))) / float(n))
+        q_hat = float(np.quantile(scores, q_level))
+
+        self.conformal_quantile = q_hat
+        self.conformal_alpha = float(alpha)
+        self.conformal_scores = scores
+        self.conformal_basis = "in_sample_auto" if in_sample else "held_out"
+
+        return {
+            "status": "calibrated",
+            "n_samples": n,
+            "alpha": float(alpha),
+            "target_coverage": 1.0 - float(alpha),
+            "quantile_q_hat": round(q_hat, 4),
+            "mean_nonconformity": round(float(np.mean(scores)), 4),
+            "basis": self.conformal_basis,
+        }
+
+    def infer_conformal(
+        self,
+        input_tokens: List[str],
+        alpha: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Conformal inference with calibrated abstention:
+        Builds prediction set C_alpha(x) = { y in Vocab : 1 - P(y) <= q_hat }.
+        - If |C_alpha| == 1: singleton prediction (high confidence), abstain=False.
+        - If |C_alpha| > 1: ambiguous prediction (epistemic uncertainty), abstain=True.
+        - If |C_alpha| == 0: out-of-distribution (OOD) input, abstain=True.
+        """
+        q_hat = self.conformal_quantile
+        uncalibrated = q_hat is None
+        if q_hat is None:
+            # Self-calibrate on known hopfield rules if available. This is
+            # IN-SAMPLE (train == calibration set), so it must not claim the
+            # held-out coverage guarantee.
+            if self.hopfield_keys:
+                auto_cal: List[Tuple[List[str], str]] = []
+                for idx, k_vec in enumerate(self.hopfield_keys):
+                    k_sims = np.dot(self.W_embed[: len(self.vocab)], k_vec)
+                    k_tok = self.inv_vocab.get(int(np.argmax(k_sims)), "<unk>")
+                    v_vec = self.hopfield_values[idx]
+                    v_sims = np.dot(self.W_embed[: len(self.vocab)], v_vec)
+                    v_tok = self.inv_vocab.get(int(np.argmax(v_sims)), "<unk>")
+                    auto_cal.append(([k_tok], v_tok))
+                if auto_cal:
+                    self.calibrate_conformal(auto_cal, alpha=alpha or 0.10, in_sample=True)
+                    q_hat = self.conformal_quantile
+                    uncalibrated = False
+            if q_hat is None:
+                # No calibration data exists: ride the neutral default, but
+                # disclose it — the old bare fallback was indistinguishable in
+                # its output from a genuinely measured q_hat of 0.50.
+                q_hat = 0.50
+
+        probs = self.get_token_probabilities(input_tokens)
+        sorted_probs = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+
+        prediction_set = [tok for tok, p in sorted_probs if (1.0 - p) <= q_hat]
+        top_tok, top_p = sorted_probs[0] if sorted_probs else ("<unk>", 0.0)
+        set_size = len(prediction_set)
+
+        if set_size == 1:
+            abstained = False
+            reason = "singleton"
+            selected_token = prediction_set[0]
+        elif set_size > 1:
+            abstained = True
+            reason = "ambiguous"
+            selected_token = top_tok
+        else:
+            abstained = True
+            reason = "ood"
+            selected_token = "<abstain>"
+
+        return {
+            "prediction_set": prediction_set,
+            "set_size": set_size,
+            "singleton": bool(set_size == 1),
+            "abstained": abstained,
+            "reason": reason,
+            "predicted_token": selected_token,
+            "top_candidate": top_tok,
+            "confidence": round(float(top_p), 4),
+            "conformal_quantile": round(float(q_hat), 4),
+            "calibrated": not uncalibrated,
+            "calibration_basis": "uncalibrated_default" if uncalibrated else self.conformal_basis,
+            "alpha": self.conformal_alpha,
+            "model_name": self.name,
+        }
+
+    def save(self, directory: Optional[Path] = None):
+        target_dir = directory or STORE_DIR
+        target_dir.mkdir(parents=True, exist_ok=True)
+        weights_file = target_dir / f"{self.name}_weights.npz"
+        meta_file = target_dir / f"{self.name}_meta.json"
+        tmp_weights = target_dir / f"tmp_{self.name}_weights.npz"
+        tmp_meta = target_dir / f"tmp_{self.name}_meta.json"
+
+        arrays = {
+            "W_Q": self.W_Q, "W_K": self.W_K, "W_V": self.W_V, "W_O": self.W_O,
+            "W_up": self.W_up, "W_down": self.W_down, "b_up": self.b_up, "b_down": self.b_down,
+            "W_embed": self.W_embed,
+        }
+        if isinstance(self.W_mlp, np.ndarray):
+            arrays["W_mlp"] = self.W_mlp
+        if self.hopfield_keys:
+            # Persist compiled Hopfield rules — the old save() dropped them, so
+            # a reloaded brain silently lost every rule (hopfield_rules_count
+            # went to 0 and conformal auto-calibration degraded with it).
+            arrays["hopfield_keys"] = np.stack(self.hopfield_keys, axis=0)
+            arrays["hopfield_values"] = np.stack(self.hopfield_values, axis=0)
+
+        # Atomic NPZ write
+        np.savez_compressed(tmp_weights, **arrays)
+        tmp_weights.replace(weights_file)
+
+        meta = {
+            "name": self.name,
+            "d_model": self.d_model,
+            "n_heads": self.n_heads,
+            "d_mlp": self.d_mlp,
+            "max_seq_len": self.max_seq_len,
+            "vocab": self.vocab,
+            "inv_vocab": {str(k): v for k, v in self.inv_vocab.items()},
+            "conformal_quantile": self.conformal_quantile,
+            "conformal_alpha": self.conformal_alpha,
+            "conformal_scores": self.conformal_scores,
+            "conformal_basis": self.conformal_basis,
+            "hopfield_rules_count": len(self.hopfield_keys),
+            "induction_heads": list(getattr(self, "induction_heads", [])),
+            "updated_at": time.time(),
+        }
+
+        # Atomic JSON write
+        with open(tmp_meta, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
+        tmp_meta.replace(meta_file)
+
+        # Mirror automatically across other canonical roots to prevent desync
+        if directory is None:
+            import shutil
+            for alt_dir in CANONICAL_STORE_DIRS:
+                if alt_dir.resolve() != target_dir.resolve():
+                    try:
+                        alt_dir.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(weights_file, alt_dir / weights_file.name)
+                        shutil.copy2(meta_file, alt_dir / meta_file.name)
+                    except Exception:
+                        pass
+
+    @classmethod
+    def load(cls, name: str, directory: Optional[Path] = None) -> Optional[AnalyticalMicroTransformer]:
+        search_dirs = [directory] if directory else []
+        search_dirs.extend([STORE_DIR] + CANONICAL_STORE_DIRS)
+
+        weights_file = None
+        meta_file = None
+        for d in search_dirs:
+            if d is None:
+                continue
+            wf = Path(d) / f"{name}_weights.npz"
+            mf = Path(d) / f"{name}_meta.json"
+            if wf.exists() and mf.exists():
+                weights_file = wf
+                meta_file = mf
+                break
+
+        if not weights_file or not meta_file:
+            return None
+
+        try:
+            with open(meta_file, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+
+            obj = cls(
+                name=meta["name"],
+                d_model=meta["d_model"],
+                n_heads=meta["n_heads"],
+                d_mlp=meta["d_mlp"],
+                max_seq_len=meta["max_seq_len"],
+            )
+            with np.load(weights_file) as data:
+                obj.W_Q = data["W_Q"]
+                obj.W_K = data["W_K"]
+                obj.W_V = data["W_V"]
+                obj.W_O = data["W_O"]
+                obj.W_up = data["W_up"]
+                obj.W_down = data["W_down"]
+                obj.b_up = data["b_up"]
+                obj.b_down = data["b_down"]
+                if "W_mlp" in data:
+                    obj.W_mlp = data["W_mlp"]
+                obj.W_embed = data["W_embed"]
+                if "hopfield_keys" in data:
+                    # Restore compiled rules saved by save() (absent in legacy
+                    # artifacts, which genuinely lost them).
+                    hk = data["hopfield_keys"]
+                    hv = data["hopfield_values"]
+                    obj.hopfield_keys = [hk[i].copy() for i in range(hk.shape[0])]
+                    obj.hopfield_values = [hv[i].copy() for i in range(hv.shape[0])]
+            obj.vocab = meta["vocab"]
+            obj.inv_vocab = {int(k): v for k, v in meta["inv_vocab"].items()}
+            obj.conformal_quantile = meta.get("conformal_quantile")
+            obj.conformal_alpha = float(meta.get("conformal_alpha", 0.10))
+            obj.conformal_scores = list(meta.get("conformal_scores", []))
+            obj.conformal_basis = str(meta.get("conformal_basis", "uncalibrated"))
+            obj.induction_heads = list(meta.get("induction_heads", []))
+            return obj
+        except Exception:
+            return None

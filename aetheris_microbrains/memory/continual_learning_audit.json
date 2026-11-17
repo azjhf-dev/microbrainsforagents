@@ -1,0 +1,58 @@
+[
+  {
+    "ts": "2026-11-17T20:44:49.626241+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0471,
+    "empirical_coverage": 0.985,
+    "status": "success"
+  },
+  {
+    "ts": "2026-11-17T20:45:05.591699+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0461,
+    "empirical_coverage": 0.985,
+    "status": "success"
+  },
+  {
+    "ts": "2026-11-17T20:49:21.081301+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0471,
+    "empirical_coverage": 0.985,
+    "status": "success"
+  },
+  {
+    "ts": "2026-11-17T20:49:55.967512+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0471,
+    "empirical_coverage": 0.985,
+    "status": "success"
+  }
+]

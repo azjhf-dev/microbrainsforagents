@@ -1,0 +1,166 @@
+{
+  "devices": {
+    "NVIDIA GeForce GT 710": {
+      "bitnet_batch_gemm": 2147483648,
+      "bitnet_resident_gemm": 2147483648,
+      "eggroll_low_rank_rollout": 2147483648,
+      "eggroll_counter_rng_es": 2147483648,
+      "eggroll_es_rollout": 2147483648,
+      "hdc_hamming_search": 512,
+      "hdc_resident_search": 512,
+      "rips_multiscale_filtration": 2147483648,
+      "active_inference_mc_rollout": 2147483648,
+      "dominated_novelty_search": 2147483648,
+      "cfc_step": 2147483648,
+      "ttt_linear_step": 2147483648,
+      "ssm_blelloch_parallel_scan": 2147483648,
+      "difflogic_bitplane_eval": 2147483648,
+      "kuramoto_hopfield_step": 2147483648,
+      "predictive_coding_sram_relax": 2147483648
+    }
+  },
+  "receipts": {
+    "NVIDIA GeForce GT 710": {
+      "hdc_resident_search": {
+        "op_name": "hdc_resident_search",
+        "device_name": "NVIDIA GeForce GT 710",
+        "crossover": 512,
+        "gpu_won_in_range": true,
+        "measurements": [
+          {
+            "size": 64,
+            "gpu_ms": 0.605,
+            "cpu_ms": 0.584
+          },
+          {
+            "size": 512,
+            "gpu_ms": 0.861,
+            "cpu_ms": 4.499
+          },
+          {
+            "size": 2048,
+            "gpu_ms": 2.101,
+            "cpu_ms": 22.835
+          },
+          {
+            "size": 8192,
+            "gpu_ms": 8.304,
+            "cpu_ms": 110.134
+          }
+        ]
+      },
+      "hdc_hamming_search": {
+        "op_name": "hdc_hamming_search",
+        "device_name": "NVIDIA GeForce GT 710",
+        "crossover": 512,
+        "gpu_won_in_range": true,
+        "measurements": [
+          {
+            "size": 64,
+            "gpu_ms": 2.454,
+            "cpu_ms": 0.667
+          },
+          {
+            "size": 512,
+            "gpu_ms": 2.99,
+            "cpu_ms": 6.923
+          },
+          {
+            "size": 2048,
+            "gpu_ms": 8.037,
+            "cpu_ms": 28.944
+          },
+          {
+            "size": 8192,
+            "gpu_ms": 26.232,
+            "cpu_ms": 113.711
+          }
+        ]
+      },
+      "bitnet_batch_gemm": {
+        "op_name": "bitnet_batch_gemm",
+        "device_name": "NVIDIA GeForce GT 710",
+        "crossover": 2147483648,
+        "gpu_won_in_range": false,
+        "measurements": [
+          {
+            "size": 32,
+            "gpu_ms": 3.011,
+            "cpu_ms": 0.301
+          },
+          {
+            "size": 256,
+            "gpu_ms": 13.996,
+            "cpu_ms": 1.938
+          },
+          {
+            "size": 1024,
+            "gpu_ms": 42.044,
+            "cpu_ms": 9.676
+          },
+          {
+            "size": 4096,
+            "gpu_ms": 161.349,
+            "cpu_ms": 30.045
+          }
+        ]
+      },
+      "cfc_step": {
+        "op_name": "cfc_step",
+        "device_name": "NVIDIA GeForce GT 710",
+        "crossover": 2147483648,
+        "gpu_won_in_range": false,
+        "measurements": [
+          {
+            "size": 64,
+            "gpu_ms": 1.13,
+            "cpu_ms": 0.055
+          },
+          {
+            "size": 256,
+            "gpu_ms": 0.875,
+            "cpu_ms": 0.035
+          },
+          {
+            "size": 1024,
+            "gpu_ms": 0.884,
+            "cpu_ms": 0.039
+          },
+          {
+            "size": 4096,
+            "gpu_ms": 0.829,
+            "cpu_ms": 0.059
+          }
+        ]
+      },
+      "ttt_linear_step": {
+        "op_name": "ttt_linear_step",
+        "device_name": "NVIDIA GeForce GT 710",
+        "crossover": 2147483648,
+        "gpu_won_in_range": false,
+        "measurements": [
+          {
+            "size": 64,
+            "gpu_ms": 1.647,
+            "cpu_ms": 0.652
+          },
+          {
+            "size": 256,
+            "gpu_ms": 2.16,
+            "cpu_ms": 0.138
+          },
+          {
+            "size": 1024,
+            "gpu_ms": 16.651,
+            "cpu_ms": 7.292
+          },
+          {
+            "size": 4096,
+            "gpu_ms": 233.872,
+            "cpu_ms": 95.401
+          }
+        ]
+      }
+    }
+  }
+}
