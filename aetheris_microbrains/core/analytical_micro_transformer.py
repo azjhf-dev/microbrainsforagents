@@ -458,14 +458,26 @@ class AnalyticalMicroTransformer:
                 # its output from a genuinely measured q_hat of 0.50.
                 q_hat = 0.50
 
+        # Proposal 3 & 4: Deterministic sorting and Conformal OOD Coverage gating
+        # Calculate vocabulary coverage to prevent guessing on OOD inputs
+        n_tokens = len(input_tokens) if input_tokens else 0
+        known_tokens = sum(1 for t in input_tokens if t in self.vocab and not t.startswith("<")) if input_tokens else 0
+        token_coverage = (known_tokens / n_tokens) if n_tokens > 0 else 1.0
+
         probs = self.get_token_probabilities(input_tokens)
-        sorted_probs = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
+        # Deterministic tie-breaking on equal probabilities (Proposal 4)
+        sorted_probs = sorted(probs.items(), key=lambda kv: (-kv[1], str(kv[0])))
 
         prediction_set = [tok for tok, p in sorted_probs if (1.0 - p) <= q_hat]
         top_tok, top_p = sorted_probs[0] if sorted_probs else ("<unk>", 0.0)
         set_size = len(prediction_set)
 
-        if set_size == 1:
+        # OOD Gate: if less than 50% of input tokens are known to the vocabulary, abstain immediately
+        if token_coverage < 0.50 and n_tokens > 0:
+            abstained = True
+            reason = "ood_coverage_breach"
+            selected_token = "<abstain>"
+        elif set_size == 1:
             abstained = False
             reason = "singleton"
             selected_token = prediction_set[0]
@@ -487,6 +499,7 @@ class AnalyticalMicroTransformer:
             "predicted_token": selected_token,
             "top_candidate": top_tok,
             "confidence": round(float(top_p), 4),
+            "token_coverage": round(float(token_coverage), 4),
             "conformal_quantile": round(float(q_hat), 4),
             "calibrated": not uncalibrated,
             "calibration_basis": "uncalibrated_default" if uncalibrated else self.conformal_basis,

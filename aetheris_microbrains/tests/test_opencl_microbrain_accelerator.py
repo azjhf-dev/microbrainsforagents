@@ -528,7 +528,7 @@ def test_wave3_proposal_5_split_conformal_calibration_and_calibrated_abstention(
     # Out-of-distribution (OOD) random noise input -> abstains
     inf_ood = brain.infer_conformal(["random_unknown_token_xyz_999"])
     assert inf_ood["abstained"] is True
-    assert inf_ood["reason"] in ("ambiguous", "ood")
+    assert inf_ood["reason"] in ("ambiguous", "ood", "ood_coverage_breach")
 
 
 def test_wave3_proposal_6_resident_hdc_experience_memory():

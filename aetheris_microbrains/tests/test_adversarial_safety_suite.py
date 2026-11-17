@@ -281,3 +281,26 @@ class TestAdversarialSafetySuite:
         assert blocked_res["tier"] == "MICROBRAIN_REJECTION"
         assert blocked_res["final_verdict"] == "BLOCKED"
         assert blocked_res["llm_invoked"] is False
+
+    def test_unicode_and_ood_coverage_gating(self):
+        """Verifies Unicode tokenization (Proposal 2) and Conformal OOD coverage gating (Proposal 3)."""
+        from tools.microbrain import _tokenize
+        from core.analytical_micro_transformer import AnalyticalMicroTransformer
+
+        # 1. Unicode tokenization preserves Cyrillic words
+        ru_tokens = _tokenize("исправь критическую ошибку в коде")
+        assert "исправь" in ru_tokens
+        assert "критическую" in ru_tokens
+        assert len(ru_tokens) == 5
+
+        # 2. Conformal OOD coverage breach triggers abstention
+        brain = AnalyticalMicroTransformer(name="ood_gate_tester", d_model=32, n_heads=2)
+        brain.compile_logic_association("known_func", "known_target")
+        cal_data = [(["known_func"], "known_target")]
+        brain.calibrate_conformal(cal_data, alpha=0.10)
+
+        # Input with mostly unknown tokens (<50% coverage) must abstain with ood_coverage_breach
+        res = brain.infer_conformal(["known_func", "completely_unknown_token_1", "completely_unknown_token_2", "completely_unknown_token_3"])
+        assert res["abstained"] is True
+        assert res["reason"] == "ood_coverage_breach"
+        assert res["token_coverage"] < 0.50

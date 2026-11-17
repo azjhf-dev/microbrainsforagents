@@ -126,6 +126,16 @@ print("Nearest models in parameter space:", nearest)
 └────────────────────────────────────┘              └────────────────────────────┘
 ```
 
+### 🎯 Scope & Design Principles (Proposal 5)
+* **What Microbrains Excel At (Deterministic Structural Signals):**
+  - AST syntax & dangerous call detection (`eval`, `exec`, `subprocess`) directly on diff trees.
+  - Diff blast radius & scale risk estimation (lines touched, core boundary crossings).
+  - Strict constitutional & sacred-site boundary preservation (`memory/bible.md`, kinship laws).
+  - Conformal selective abstention for high-stakes tool execution.
+* **What Microbrains Are NOT For (Raw Natural Language SWE Prompts):**
+  - Unstructured, multi-lingual free-form developer chat ("*добавь валидацию email...*").
+  - For free-form SWE prompt classification, standard keyword/stemming baselines or token embedding classifiers are recommended. Microbrains strictly enforce a **Conformal OOD Coverage Gate**: if input text shares <50% vocabulary coverage, the microbrain abstains (`ood_coverage_breach`) and delegates to the primary LLM rather than guessing.
+
 ---
 
 ## 🧪 Testing & Empirical Safety Benchmarks

@@ -404,6 +404,7 @@ class CriticalEnsemble:
 
         deny_votes = [v for v in votes if v.verdict == "DENY"]
         abstain_votes = [v for v in votes if v.verdict == "ABSTAIN"]
+        allow_votes = [v for v in votes if v.verdict == "ALLOW"]
 
         # Hard invariant gate: certified rejection by constitutional, syntax, or destructive boundary models
         hard_veto_estimators = {"constitutional_guardian", "code_edit_verifier", "tool_failure_classifier"}
@@ -416,18 +417,22 @@ class CriticalEnsemble:
                 f"Consensus rejected: Certified invariant violation detected "
                 f"({len(deny_votes)} DENY votes: {[v.estimator_name for v in deny_votes]}, mean_prob={mean_prob:.3f}). Direct block."
             )
-        elif len(abstain_votes) > 0 or std_dev > 0.25 or mean_prob < 0.75:
+        elif len(deny_votes) == 0 and len(abstain_votes) == 0 and std_dev <= 0.25 and mean_prob >= 0.75:
+            # Proposal 5: Strict unanimous consensus required for autonomous approval
+            status = "CONSENSUS_APPROVED"
+            abstention = False
+            rationale = (
+                f"Ensemble unanimous consensus approved (all {len(allow_votes)} models voted ALLOW, "
+                f"mean confidence {mean_prob:.3f}, std_dev {std_dev:.3f})."
+            )
+        else:
             status = "ABSTAIN_DELEGATE_TO_LLM"
             abstention = True
             rationale = (
-                f"Selective Abstention triggered: Estimator disagreement or model uncertainty "
-                f"(std={std_dev:.3f}, mean={mean_prob:.3f}, abstained_models={len(abstain_votes)}). "
+                f"Selective Abstention triggered: Non-unanimous agreement, estimator disagreement, or uncertainty "
+                f"(std={std_dev:.3f}, mean={mean_prob:.3f}, deny_models={len(deny_votes)}, abstained_models={len(abstain_votes)}). "
                 f"Escalating boundary case to Cascade Router / LLM."
             )
-        else:
-            status = "CONSENSUS_APPROVED"
-            abstention = False
-            rationale = f"Ensemble consensus approved (mean confidence {mean_prob:.3f}, std_dev {std_dev:.3f})."
 
         return CriticalConsensusResult(
             status=status,
@@ -464,8 +469,8 @@ class CriticalEnsemble:
             # Escalated to LLM Cascade Router
             from .cascade_ensemble import get_cascade_ensemble_router
             router = get_cascade_ensemble_router()
-            cascade_res = router.evaluate_action(
-                intent_task=f"Escalated action: {action_name} on {target_path}",
+            cascade_res = router.evaluate_action_pipeline(
+                task_prompt=f"Escalated action: {action_name} on {target_path}",
                 target_tool=action_name,
                 tool_args={"path": target_path, "diff": payload_diff, "cmd": target_path},
             )

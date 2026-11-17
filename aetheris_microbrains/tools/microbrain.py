@@ -108,15 +108,20 @@ def _load_brain(name: str):
 
 
 def _tokenize(text: str) -> List[str]:
-    return [t for t in re.findall(r"[a-zA-Z0-9_]+", str(text or "").lower()) if t]
+    """Unicode-aware tokenization supporting Cyrillic and Latin SWE terms (Proposal 2)."""
+    return [t for t in re.findall(r"(?u)\b\w+\b", str(text or "").lower()) if t]
 
 
 def _route(tokens: List[str]) -> Dict[str, Any]:
-    """Best brain by vocabulary overlap; no weight IO."""
+    """Best brain by vocabulary overlap; deterministic tie-breaking (Proposals 2 & 4)."""
     metas = _list_brain_metas()
     if not metas:
         return {"success": True, "abstained": True, "domain": None,
                 "reason": "no trained brains found in memory/store/neuro_brains"}
+    
+    # Deterministic sorting of metas by name to eliminate PYTHONHASHSEED bias
+    metas = sorted(metas, key=lambda m: str(m.get("_name") or m.get("name") or ""))
+
     best, best_hits = None, 0
     for meta in metas:
         vocab = _brain_vocab(meta)
@@ -124,10 +129,14 @@ def _route(tokens: List[str]) -> Dict[str, Any]:
         if hits > best_hits or (hits == best_hits and best is None):
             best, best_hits = meta, hits
     overlap = best_hits / max(1, len(tokens))
-    if best_hits == 0:
+    
+    # Proposal 3: Conformal OOD coverage check.
+    # If overlap < 0.25 (less than 25% of input tokens matched), declare abstention
+    if best_hits == 0 or overlap < 0.25:
         domains = [str(m.get("_name") or "?") for m in metas]
         return {"success": True, "abstained": True, "domain": None,
-                "reason": "no trained domain shares vocabulary with the input",
+                "reason": "OOD coverage breach: input shares insufficient vocabulary with trained domains",
+                "overlap": round(overlap, 3),
                 "available_domains": domains}
     return {"success": True, "abstained": False, "domain": best,
             "overlap": round(overlap, 3)}
