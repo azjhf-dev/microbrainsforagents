@@ -150,18 +150,15 @@
     "69": "angle_divergence",
     "70": "excessive"
   },
-  "conformal_quantile": 0.9946440840139985,
+  "conformal_quantile": 0.9948664186522365,
   "conformal_alpha": 0.1,
   "conformal_scores": [
-    0.9946440840139985,
-    0.9946440840139985,
-    0.25468510389328003,
-    0.25468510389328003,
-    0.9749371893703938,
-    0.9749371893703938
+    0.9948664186522365,
+    0.1480831503868103,
+    0.9904662976041436
   ],
   "conformal_basis": "held_out",
   "hopfield_rules_count": 16,
   "induction_heads": [],
-  "updated_at": 1794953201.626059
+  "updated_at": 1794955384.161261
 }

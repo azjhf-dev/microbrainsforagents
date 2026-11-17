@@ -144,7 +144,8 @@
     "compile_ok": 136,
     "types_aligned": 137,
     "runtime_error": 138,
-    "file_line_known": 139
+    "file_line_known": 139,
+    "architectural": 140
   },
   "inv_vocab": {
     "0": "<pad>",
@@ -254,22 +255,19 @@
     "136": "compile_ok",
     "137": "types_aligned",
     "138": "runtime_error",
-    "139": "file_line_known"
+    "139": "file_line_known",
+    "140": "architectural"
   },
-  "conformal_quantile": 0.9931276761926711,
+  "conformal_quantile": 0.9927811310626566,
   "conformal_alpha": 0.1,
   "conformal_scores": [
-    0.9780754372477531,
-    0.9780754372477531,
-    0.7312273979187012,
-    0.7312273979187012,
-    0.9715201035141945,
-    0.9715201035141945,
-    0.9931276761926711,
-    0.9931276761926711
+    0.9714563600718975,
+    0.44366347789764404,
+    0.9610833674669266,
+    0.9927811310626566
   ],
   "conformal_basis": "held_out",
-  "hopfield_rules_count": 29,
+  "hopfield_rules_count": 30,
   "induction_heads": [],
-  "updated_at": 1794953201.5818887
+  "updated_at": 1794955416.5377777
 }

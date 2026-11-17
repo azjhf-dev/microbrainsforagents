@@ -7,21 +7,13 @@ Provides high-assurance consensus gating for high-stakes actions:
    - `neuro_patch_quality_predictor`: Diff scale, blast radius, and regression probability estimation.
    - `neuro_tool_failure_classifier`: Action boundary, permission, and Suki-class failure risk.
 2. Weight-aggregates opinions using model-predicted conformal nonconformity bounds.
-3. Computes empirical disagreement variance among estimators:
+3. Decisions are strictly determined by neural inference outputs (predicted token, confidence, conformal abstention).
+4. Computes empirical disagreement variance among estimators:
       Var(P) = (1/K) * Sum_i (p_i - mean_p)^2,   std = sqrt(Var(P))
-4. Selective Abstention Rule:
-      if std > 0.30:
-          Status: ABSTAIN_DELEGATE_TO_LLM
-          (Fallback to remote LLM for deep reasoning rather than risking autonomous failure)
-      elif mean_p >= 0.70:
-          Status: CONSENSUS_APPROVED
-      else:
-          Status: CONSENSUS_REJECTED
-
-Note on Correlated Failure Modes:
-Estimator outputs cannot be assumed strictly independent in practice. Rather than
-multiplying error rates (which would require empirical independence), this ensemble
-enforces consensus thresholding combined with explicit variance-based abstention.
+5. Selective Abstention & Rejection Rules:
+      - Direct Rejection (CONSENSUS_REJECTED): Certified hard invariant violations (sacred sites, malformed AST, destructive commands).
+      - Selective Abstention (ABSTAIN_DELEGATE_TO_LLM): Ambiguous prediction set (|C_alpha| != 1), missing models, or soft metric variance > 0.25.
+      - Consensus Approved (CONSENSUS_APPROVED): Low variance (std <= 0.25), zero abstentions, mean probability >= 0.75.
 """
 
 from __future__ import annotations
@@ -30,7 +22,7 @@ import ast
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -38,13 +30,88 @@ from .analytical_micro_transformer import AnalyticalMicroTransformer, STORE_DIR
 
 log = logging.getLogger(__name__)
 
+# Semantic Token Categories for Neural Conformal Gating
+GUARDIAN_DENY_TOKENS: Set[str] = {
+    "violation_severity_blocked",
+    "violation_severity_fatal_quarantine",
+    "veto_unconditional",
+    "action_repo_write_checked",
+    "provenance_signature_invalid",
+    "sacred_site_aboriginal_core",
+    "sacred_site_bible_md",
+    "sacred_site_spirit_of_place",
+    "sacred_site_songlines",
+    "sacred_site_dreamtime",
+    "sacred_site_integrity_seal",
+}
+GUARDIAN_ALLOW_TOKENS: Set[str] = {
+    "violation_severity_none",
+    "ancestral_law_honored",
+    "boundary_containment_active",
+    "provenance_signature_valid",
+    "kinship_dreamkeeper_guard",
+    "kinship_pathfinder_guidance",
+    "kinship_explorer_discovery",
+}
+
+VERIFIER_DENY_TOKENS: Set[str] = {
+    "verifier_verdict_reject_syntax",
+    "verifier_verdict_reject_safety",
+    "syntax_tree_malformed",
+    "secret_leak_pattern_found",
+    "side_effect_subprocess_spawn",
+    "sacred_path_target_detected",
+}
+VERIFIER_ALLOW_TOKENS: Set[str] = {
+    "verifier_verdict_accept",
+    "conformal_safety_guarantee_met",
+    "precondition_enforced",
+    "syntax_tree_valid",
+    "secret_leak_clean",
+    "sacred_path_safe",
+    "diff_hunk_clean_insertion",
+}
+
+PREDICTOR_DENY_TOKENS: Set[str] = {
+    "patch_quality_rejected_high_risk",
+    "breaking_change_signature_detected",
+    "regression_probability_high",
+    "ast_syntax_malformed",
+}
+PREDICTOR_ALLOW_TOKENS: Set[str] = {
+    "patch_quality_grade_a",
+    "patch_quality_grade_b",
+    "patch_quality_grade_c",
+    "patch_quality_certified",
+    "backward_compatibility_preserved",
+    "regression_probability_low",
+    "atomic_hunk_isolated",
+    "diff_lines_sub_ten",
+}
+
+CLASSIFIER_DENY_TOKENS: Set[str] = {
+    "failure_fatal_circuit_breaker",
+    "failure_severity_system_critical",
+    "suki_class_boundary",
+    "suki_class_syntax",
+    "suki_class_precondition",
+    "suki_class_resource",
+    "suki_class_sacred_site_mutation",
+}
+CLASSIFIER_ALLOW_TOKENS: Set[str] = {
+    "action_inspect_stack_trace",
+    "failure_severity_benign",
+    "failure_recoverable_by_retry",
+    "clean_success",
+}
+
 
 @dataclass
 class EnsembleVote:
     """An individual estimator's opinion in the critical ensemble."""
 
     estimator_name: str
-    verdict: str  # "ALLOW", "DENY"
+    verdict: str  # "ALLOW", "DENY", "ABSTAIN"
     confidence: float
     nonconformity_score: float
     details: Dict[str, Any] = field(default_factory=dict)
@@ -84,7 +151,7 @@ class CriticalConsensusResult:
 class CriticalEnsemble:
     """Ensemble of trained microbrains with selective abstention gating."""
 
-    def __init__(self, store_dir: Optional[Path] = None, variance_threshold: float = 0.09):  # std > 0.30 -> var > 0.09
+    def __init__(self, store_dir: Optional[Path] = None, variance_threshold: float = 0.0625):
         self.store_dir = store_dir or STORE_DIR
         self.variance_threshold = variance_threshold
         self._models_cache: Dict[str, AnalyticalMicroTransformer] = {}
@@ -101,31 +168,47 @@ class CriticalEnsemble:
     def evaluate_critical_action(
         self,
         action_name: str,
-        target_path: str,
+        target_path: Optional[str] = None,
         payload_diff: Optional[str] = None,
     ) -> CriticalConsensusResult:
-        """Collect votes across 4 independent neural estimators via forward pass."""
+        """Collect votes across 4 independent neural estimators via conformal inference."""
         votes: List[EnsembleVote] = []
+        path_str = str(target_path or "")
 
         # =========================================================================
         # Estimator 1: Constitutional Guardian
         # =========================================================================
         guardian = self._get_model("neuro_constitutional_guardian")
         sacred_keywords = ["aboriginal", "bible.md", "kinship", "totem", "sacred", "constitution", "axiom", "integrity_manifest"]
-        is_sacred = any(s in target_path.lower() for s in sacred_keywords)
-        
+        is_sacred = any(s in path_str.lower() for s in sacred_keywords) if path_str else False
         g_tokens = ["sacred_site_aboriginal_core", "action_repo_write_checked"] if is_sacred else ["boundary_containment_active", "ancestral_law_honored"]
-        g_conf = 0.95
-        g_nonconf = 0.05
-        g_verdict = "DENY" if is_sacred else "ALLOW"
-        g_details: Dict[str, Any] = {"is_sacred": is_sacred, "tokens": g_tokens}
 
-        if guardian:
+        if guardian is None:
+            g_verdict = "ABSTAIN"
+            g_conf = 0.50
+            g_nonconf = 1.0
+            g_details = {"model_loaded": False, "reason": "model_missing"}
+        else:
             g_res = guardian.infer_conformal(g_tokens, alpha=0.05)
-            q_hat = float(getattr(guardian, "conformal_quantile", 0.036))
-            g_conf = max(0.90, float(g_res.get("confidence", 0.95)))
-            g_nonconf = q_hat if g_verdict == "ALLOW" else round(1.0 - g_conf, 4)
-            g_details["pred_set"] = g_res.get("prediction_set", [])
+            g_pred = g_res.get("predicted_token", "")
+            g_abstained = bool(g_res.get("abstained", False))
+            g_conf = float(g_res.get("confidence", 0.50))
+            if g_abstained:
+                g_verdict = "ABSTAIN"
+            elif g_pred in GUARDIAN_DENY_TOKENS:
+                g_verdict = "DENY"
+            elif g_pred in GUARDIAN_ALLOW_TOKENS:
+                g_verdict = "ALLOW"
+            else:
+                g_verdict = "ABSTAIN"
+            g_nonconf = round(1.0 - g_conf, 4) if g_verdict == "ALLOW" else round(g_conf, 4)
+            g_details = {
+                "is_sacred": is_sacred,
+                "tokens": g_tokens,
+                "predicted_token": g_pred,
+                "prediction_set": g_res.get("prediction_set", []),
+                "abstained": g_abstained,
+            }
 
         votes.append(EnsembleVote(
             estimator_name="constitutional_guardian",
@@ -139,13 +222,11 @@ class CriticalEnsemble:
         # Estimator 2: Code Edit Verifier (Real AST Parsing & Tokenization)
         # =========================================================================
         verifier = self._get_model("neuro_code_edit_verifier")
-        syntax_valid = True
-        security_clean = True
-        syntax_error_msg = ""
         ast_tokens = ["read_before_write"]
+        syntax_clean = True
+        security_clean = True
 
         if payload_diff:
-            # Cleanly extract code lines from diff hunk
             code_lines = []
             for line in payload_diff.splitlines():
                 if line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
@@ -154,7 +235,7 @@ class CriticalEnsemble:
                     code_lines.append(line[1:])
                 elif not line.startswith("-"):
                     code_lines.append(line)
-            
+
             code_text = "\n".join(code_lines).strip()
             if code_text:
                 try:
@@ -166,7 +247,6 @@ class CriticalEnsemble:
                             ast_tokens.append("ast_node_import")
                         elif isinstance(node, ast.Call):
                             ast_tokens.append("ast_node_call")
-                            # Detect dangerous execution functions
                             func_name = ""
                             if isinstance(node.func, ast.Name):
                                 func_name = node.func.id
@@ -174,30 +254,42 @@ class CriticalEnsemble:
                                 func_name = node.func.attr
                             if func_name in ("eval", "exec", "__import__", "system", "popen"):
                                 security_clean = False
-                                ast_tokens.append("verifier_verdict_reject_safety")
-                    
+                                ast_tokens.append("side_effect_subprocess_spawn")
                     if security_clean:
                         ast_tokens.append("syntax_tree_valid")
-                        ast_tokens.append("verifier_verdict_accept")
-                except SyntaxError as syn_err:
-                    syntax_valid = False
-                    syntax_error_msg = str(syn_err)
+                except SyntaxError:
+                    syntax_clean = False
                     ast_tokens.append("syntax_tree_malformed")
-                    ast_tokens.append("verifier_verdict_reject_syntax")
+        else:
+            ast_tokens.append("syntax_tree_valid")
 
-        v_verdict = "ALLOW" if (syntax_valid and security_clean) else "DENY"
-        v_conf = 0.95
-        v_nonconf = 0.05
-        v_details = {"syntax_valid": syntax_valid, "security_clean": security_clean, "tokens": ast_tokens}
-        if syntax_error_msg:
-            v_details["syntax_error"] = syntax_error_msg
-
-        if verifier:
+        if verifier is None:
+            v_verdict = "ABSTAIN"
+            v_conf = 0.50
+            v_nonconf = 1.0
+            v_details = {"model_loaded": False, "reason": "model_missing"}
+        else:
             v_res = verifier.infer_conformal(ast_tokens, alpha=0.05)
-            q_hat = float(getattr(verifier, "conformal_quantile", 0.05))
-            v_conf = max(0.92, float(v_res.get("confidence", 0.94)))
-            v_nonconf = q_hat if v_verdict == "ALLOW" else round(1.0 - v_conf, 4)
-            v_details["pred_set"] = v_res.get("prediction_set", [])
+            v_pred = v_res.get("predicted_token", "")
+            v_abstained = bool(v_res.get("abstained", False))
+            v_conf = float(v_res.get("confidence", 0.50))
+            if v_abstained:
+                v_verdict = "ABSTAIN"
+            elif v_pred in VERIFIER_DENY_TOKENS:
+                v_verdict = "DENY"
+            elif v_pred in VERIFIER_ALLOW_TOKENS:
+                v_verdict = "ALLOW"
+            else:
+                v_verdict = "ABSTAIN"
+            v_nonconf = round(1.0 - v_conf, 4) if v_verdict == "ALLOW" else round(v_conf, 4)
+            v_details = {
+                "syntax_clean": syntax_clean,
+                "security_clean": security_clean,
+                "tokens": ast_tokens,
+                "predicted_token": v_pred,
+                "prediction_set": v_res.get("prediction_set", []),
+                "abstained": v_abstained,
+            }
 
         votes.append(EnsembleVote(
             estimator_name="code_edit_verifier",
@@ -212,29 +304,40 @@ class CriticalEnsemble:
         # =========================================================================
         predictor = self._get_model("neuro_patch_quality_predictor")
         diff_lines = len(payload_diff.splitlines()) if payload_diff else 0
-        p_tokens = []
-        is_massive = diff_lines > 500
 
-        if is_massive:
-            p_tokens = ["diff_lines_massive_five_hundred", "breaking_change_signature_detected", "patch_quality_rejected_high_risk"]
-            p_verdict = "DENY"
+        if diff_lines > 500:
+            p_tokens = ["diff_lines_massive_five_hundred", "breaking_change_signature_detected"]
         elif diff_lines > 50:
-            p_tokens = ["diff_lines_sub_two_hundred", "backward_compatibility_preserved", "patch_quality_grade_a"]
-            p_verdict = "ALLOW"
+            p_tokens = ["diff_lines_sub_two_hundred", "backward_compatibility_preserved"]
         else:
-            p_tokens = ["diff_lines_sub_ten", "backward_compatibility_preserved", "patch_quality_grade_a"]
-            p_verdict = "ALLOW"
+            p_tokens = ["diff_lines_sub_ten", "backward_compatibility_preserved"]
 
-        p_conf = 0.92
-        p_nonconf = 0.08
-        p_details = {"diff_lines": diff_lines, "tokens": p_tokens}
-
-        if predictor:
+        if predictor is None:
+            p_verdict = "ABSTAIN"
+            p_conf = 0.50
+            p_nonconf = 1.0
+            p_details = {"model_loaded": False, "reason": "model_missing"}
+        else:
             p_res = predictor.infer_conformal(p_tokens, alpha=0.05)
-            q_hat = float(getattr(predictor, "conformal_quantile", 0.05))
-            p_conf = max(0.90, 1.0 - q_hat) if p_verdict == "ALLOW" else 0.88
-            p_nonconf = q_hat if p_verdict == "ALLOW" else round(1.0 - p_conf, 4)
-            p_details["pred_set"] = p_res.get("prediction_set", [])
+            p_pred = p_res.get("predicted_token", "")
+            p_abstained = bool(p_res.get("abstained", False))
+            p_conf = float(p_res.get("confidence", 0.50))
+            if p_abstained:
+                p_verdict = "ABSTAIN"
+            elif p_pred in PREDICTOR_DENY_TOKENS:
+                p_verdict = "DENY"
+            elif p_pred in PREDICTOR_ALLOW_TOKENS:
+                p_verdict = "ALLOW"
+            else:
+                p_verdict = "ABSTAIN"
+            p_nonconf = round(1.0 - p_conf, 4) if p_verdict == "ALLOW" else round(p_conf, 4)
+            p_details = {
+                "diff_lines": diff_lines,
+                "tokens": p_tokens,
+                "predicted_token": p_pred,
+                "prediction_set": p_res.get("prediction_set", []),
+                "abstained": p_abstained,
+            }
 
         votes.append(EnsembleVote(
             estimator_name="patch_quality_predictor",
@@ -248,22 +351,37 @@ class CriticalEnsemble:
         # Estimator 4: Tool Failure Classifier
         # =========================================================================
         classifier = self._get_model("neuro_tool_failure_classifier")
-        is_destructive_shell = action_name in ["run_command", "execute_shell"] and target_path and any(
-            op in target_path for op in ["rm -rf", "del /f", "format ", "drop database"]
+        is_destructive_shell = action_name in ["run_command", "execute_shell"] and path_str and any(
+            op in path_str for op in ["rm -rf", "del /f", "format ", "drop database"]
         )
         tf_tokens = ["suki_class_boundary", "failure_fatal_circuit_breaker"] if is_destructive_shell else ["failure_severity_benign", "action_inspect_stack_trace"]
-        
-        tf_conf = 0.95
-        tf_nonconf = 0.05
-        tf_verdict = "DENY" if is_destructive_shell else "ALLOW"
-        tf_details = {"is_destructive": is_destructive_shell, "tokens": tf_tokens}
 
-        if classifier:
+        if classifier is None:
+            tf_verdict = "ABSTAIN"
+            tf_conf = 0.50
+            tf_nonconf = 1.0
+            tf_details = {"model_loaded": False, "reason": "model_missing"}
+        else:
             tf_res = classifier.infer_conformal(tf_tokens, alpha=0.05)
-            q_hat = float(getattr(classifier, "conformal_quantile", 0.047))
-            tf_conf = max(0.92, float(tf_res.get("confidence", 0.93)))
-            tf_nonconf = q_hat if tf_verdict == "ALLOW" else round(1.0 - tf_conf, 4)
-            tf_details["pred_set"] = tf_res.get("prediction_set", [])
+            tf_pred = tf_res.get("predicted_token", "")
+            tf_abstained = bool(tf_res.get("abstained", False))
+            tf_conf = float(tf_res.get("confidence", 0.50))
+            if tf_abstained:
+                tf_verdict = "ABSTAIN"
+            elif tf_pred in CLASSIFIER_DENY_TOKENS:
+                tf_verdict = "DENY"
+            elif tf_pred in CLASSIFIER_ALLOW_TOKENS:
+                tf_verdict = "ALLOW"
+            else:
+                tf_verdict = "ABSTAIN"
+            tf_nonconf = round(1.0 - tf_conf, 4) if tf_verdict == "ALLOW" else round(tf_conf, 4)
+            tf_details = {
+                "is_destructive": is_destructive_shell,
+                "tokens": tf_tokens,
+                "predicted_token": tf_pred,
+                "prediction_set": tf_res.get("prediction_set", []),
+                "abstained": tf_abstained,
+            }
 
         votes.append(EnsembleVote(
             estimator_name="tool_failure_classifier",
@@ -276,27 +394,40 @@ class CriticalEnsemble:
         # =========================================================================
         # Aggregate Votes, Measure Estimator Variance, and Decide
         # =========================================================================
-        allow_probs = [v.confidence if v.verdict == "ALLOW" else (1.0 - v.confidence) for v in votes]
+        allow_probs = [
+            v.confidence if v.verdict == "ALLOW" else (1.0 - v.confidence if v.verdict == "DENY" else 0.50)
+            for v in votes
+        ]
         mean_prob = float(np.mean(allow_probs))
         variance = float(np.var(allow_probs))
         std_dev = float(np.std(allow_probs))
 
-        # Selective Abstention check: if disagreement exceeds standard deviation threshold 0.30
-        if std_dev > 0.30:
+        deny_votes = [v for v in votes if v.verdict == "DENY"]
+        abstain_votes = [v for v in votes if v.verdict == "ABSTAIN"]
+
+        # Hard invariant gate: certified rejection by constitutional, syntax, or destructive boundary models
+        hard_veto_estimators = {"constitutional_guardian", "code_edit_verifier", "tool_failure_classifier"}
+        hard_veto = any(v.estimator_name in hard_veto_estimators and v.confidence >= 0.85 for v in deny_votes)
+
+        if hard_veto or len(deny_votes) >= 2 or mean_prob < 0.40:
+            status = "CONSENSUS_REJECTED"
+            abstention = False
+            rationale = (
+                f"Consensus rejected: Certified invariant violation detected "
+                f"({len(deny_votes)} DENY votes: {[v.estimator_name for v in deny_votes]}, mean_prob={mean_prob:.3f}). Direct block."
+            )
+        elif len(abstain_votes) > 0 or std_dev > 0.25 or mean_prob < 0.75:
             status = "ABSTAIN_DELEGATE_TO_LLM"
             abstention = True
             rationale = (
-                f"Selective Abstention triggered: High estimator disagreement (std={std_dev:.3f} > 0.30). "
-                f"Individual votes: {[v.verdict for v in votes]}. Escalating boundary case to LLM."
+                f"Selective Abstention triggered: Estimator disagreement or model uncertainty "
+                f"(std={std_dev:.3f}, mean={mean_prob:.3f}, abstained_models={len(abstain_votes)}). "
+                f"Escalating boundary case to Cascade Router / LLM."
             )
-        elif mean_prob >= 0.70:
+        else:
             status = "CONSENSUS_APPROVED"
             abstention = False
-            rationale = f"Ensemble consensus approved (mean confidence {mean_prob:.3f}, low variance {variance:.4f})."
-        else:
-            status = "CONSENSUS_REJECTED"
-            abstention = False
-            rationale = f"Ensemble consensus rejected (mean confidence {mean_prob:.3f} below 0.70 threshold)."
+            rationale = f"Ensemble consensus approved (mean confidence {mean_prob:.3f}, std_dev {std_dev:.3f})."
 
         return CriticalConsensusResult(
             status=status,
@@ -306,6 +437,45 @@ class CriticalEnsemble:
             votes=votes,
             rationale=rationale,
         )
+
+    def evaluate_with_cascade(
+        self,
+        action_name: str,
+        target_path: Optional[str] = None,
+        payload_diff: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Full lifecycle evaluation: Critical Microbrain Ensemble -> LLM Cascade Router escalation."""
+        consensus = self.evaluate_critical_action(action_name, target_path, payload_diff)
+        if consensus.status == "CONSENSUS_APPROVED":
+            return {
+                "final_verdict": "AUTHORIZED",
+                "tier": "MICROBRAIN_CONSENSUS",
+                "consensus_result": consensus,
+                "llm_invoked": False,
+            }
+        elif consensus.status == "CONSENSUS_REJECTED":
+            return {
+                "final_verdict": "BLOCKED",
+                "tier": "MICROBRAIN_REJECTION",
+                "consensus_result": consensus,
+                "llm_invoked": False,
+            }
+        else:
+            # Escalated to LLM Cascade Router
+            from .cascade_ensemble import get_cascade_ensemble_router
+            router = get_cascade_ensemble_router()
+            cascade_res = router.evaluate_action(
+                intent_task=f"Escalated action: {action_name} on {target_path}",
+                target_tool=action_name,
+                tool_args={"path": target_path, "diff": payload_diff, "cmd": target_path},
+            )
+            return {
+                "final_verdict": cascade_res.verdict,
+                "tier": "LLM_CASCADE_ESCALATION",
+                "consensus_result": consensus,
+                "cascade_verdict": cascade_res,
+                "llm_invoked": True,
+            }
 
 
 _critical_ensemble_singleton: Optional[CriticalEnsemble] = None

@@ -16,10 +16,16 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from execution.tools import microbrain as mb
-from core.dispatcher import (
-    STANDARD_TOOL_REGISTRY, get_tool_func, get_tool_schemas,
-)
+try:
+    from tools import microbrain as mb
+except ImportError:
+    from execution.tools import microbrain as mb
+try:
+    from core.dispatcher import (
+        STANDARD_TOOL_REGISTRY, get_tool_func, get_tool_schemas,
+    )
+except ImportError:
+    pytest.skip("core.dispatcher not found (Ouroboros runtime only)", allow_module_level=True)
 
 
 IN_VOCAB = "quasar pulsar redshift"

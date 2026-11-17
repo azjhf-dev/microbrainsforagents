@@ -35,7 +35,7 @@ ACTIVE_CORE_DATASETS: Dict[str, List[Tuple[List[str], str]]] = {
         (["search", "find", "grep", "locate"], "web_search"),
         (["refactor", "clean", "organize", "split"], "refactor"),
         (["memory", "recall", "blackboard", "remember"], "memory_recall"),
-        (["audit", "check", "verify", "health"], "system_audit"),
+        (["audit", "system_check", "verify", "health"], "system_audit"),
         (["shell", "cmd", "terminal", "powershell"], "run_shell"),
         (["exception", "stacktrace", "unhandled"], "debug"),
         (["fetch", "cat", "examine", "lines"], "repo_read"),
@@ -168,6 +168,106 @@ ACTIVE_CORE_DATASETS: Dict[str, List[Tuple[List[str], str]]] = {
         (["sign_magnitude_trimming", "active"], "ties_consensus"),
         (["opposing_vectors", "median_resolved"], "resolve_sign_conflict"),
     ],
+    "constitutional_guardian": [
+        # Train split (0..11)
+        (["sacred_site_aboriginal_core", "action_repo_write_checked"], "violation_severity_blocked"),
+        (["sacred_site_bible_md", "action_repo_write_checked"], "veto_unconditional"),
+        (["boundary_containment_active", "ancestral_law_honored"], "violation_severity_none"),
+        (["sacred_site_spirit_of_place", "action_config_mutate_checked"], "violation_severity_blocked"),
+        (["provenance_signature_valid", "ancestral_law_honored"], "violation_severity_none"),
+        (["sacred_site_songlines", "action_repo_write_checked"], "violation_severity_blocked"),
+        (["sacred_site_dreamtime", "action_shell_exec_checked"], "violation_severity_blocked"),
+        (["kinship_dreamkeeper_guard", "boundary_containment_active"], "violation_severity_none"),
+        (["provenance_signature_invalid", "action_repo_write_checked"], "violation_severity_fatal_quarantine"),
+        (["kinship_pathfinder_guidance", "ancestral_law_honored"], "violation_severity_none"),
+        (["sacred_site_integrity_seal", "action_repo_write_checked"], "veto_unconditional"),
+        (["kinship_explorer_discovery", "boundary_containment_active"], "violation_severity_none"),
+        # Calibration split (12..15) - strictly disjoint
+        (["article_1_clause", "sacred_site_aboriginal_core"], "violation_severity_blocked"),
+        (["article_2_clause", "boundary_containment_active"], "violation_severity_none"),
+        (["bible_principle_2_sacred_sites", "action_repo_write_checked"], "veto_unconditional"),
+        (["bible_principle_10_sovereignty", "ancestral_law_honored"], "violation_severity_none"),
+        # Validation split (16..19) - strictly disjoint
+        (["article_5_clause", "sacred_site_dreamtime"], "violation_severity_blocked"),
+        (["article_10_clause", "provenance_signature_valid"], "violation_severity_none"),
+        (["bible_principle_4_merkle_seal", "provenance_signature_invalid"], "violation_severity_fatal_quarantine"),
+        (["bible_principle_3_kinship", "boundary_containment_active"], "violation_severity_none"),
+    ],
+    "code_edit_verifier": [
+        # Train split (0..11)
+        (["syntax_tree_malformed", "ast_node_try_except"], "verifier_verdict_reject_safety"),
+        (["ast_node_call", "side_effect_subprocess_spawn"], "verifier_verdict_reject_safety"),
+        (["syntax_tree_valid", "ast_node_function_def"], "verifier_verdict_accept"),
+        (["secret_leak_pattern_found", "sacred_path_safe"], "verifier_verdict_reject_safety"),
+        (["diff_hunk_clean_insertion", "syntax_tree_valid"], "verifier_verdict_accept"),
+        (["sacred_path_target_detected", "side_effect_filesystem_write"], "verifier_verdict_reject_safety"),
+        (["ast_node_call", "secret_leak_pattern_found"], "verifier_verdict_reject_safety"),
+        (["read_before_write", "syntax_tree_valid"], "precondition_enforced"),
+        (["side_effect_network_socket", "side_effect_subprocess_spawn"], "verifier_verdict_reject_safety"),
+        (["ast_node_class_def", "syntax_tree_valid"], "verifier_verdict_accept"),
+        (["syntax_tree_malformed", "diff_hunk_balanced_deletion"], "verifier_verdict_reject_safety"),
+        (["ast_node_return_stmt", "syntax_tree_valid"], "verifier_verdict_accept"),
+        # Calibration split (12..15) - strictly disjoint
+        (["ast_node_import", "secret_leak_pattern_found"], "verifier_verdict_reject_safety"),
+        (["ast_node_for_loop", "syntax_tree_valid"], "verifier_verdict_accept"),
+        (["syntax_tree_malformed", "ast_node_if_stmt"], "verifier_verdict_reject_safety"),
+        (["ast_node_with_stmt", "syntax_tree_valid"], "verifier_verdict_accept"),
+        # Validation split (16..19) - strictly disjoint
+        (["ast_node_assign", "side_effect_subprocess_spawn"], "verifier_verdict_reject_safety"),
+        (["ast_node_assert_stmt", "syntax_tree_valid"], "verifier_verdict_accept"),
+        (["syntax_tree_malformed", "ast_node_import_from"], "verifier_verdict_reject_safety"),
+        (["diff_hunk_whitespace_only", "syntax_tree_valid"], "verifier_verdict_accept"),
+    ],
+    "patch_quality_predictor": [
+        # Train split (0..11)
+        (["diff_lines_massive_five_hundred", "breaking_change_signature_detected"], "patch_quality_rejected_high_risk"),
+        (["diff_lines_sub_ten", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["diff_lines_sub_fifty", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["regression_probability_high", "breaking_change_signature_detected"], "patch_quality_rejected_high_risk"),
+        (["diff_lines_sub_two_hundred", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["ast_syntax_malformed", "diff_lines_massive_five_hundred"], "patch_quality_rejected_high_risk"),
+        (["touches_tools_only", "regression_probability_low"], "patch_quality_grade_a"),
+        (["touches_tests_only", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["touches_core_paths", "breaking_change_signature_detected"], "patch_quality_rejected_high_risk"),
+        (["touches_documentation_only", "diff_lines_sub_fifty"], "patch_quality_grade_a"),
+        (["blast_radius_files_14", "diff_lines_massive_five_hundred"], "patch_quality_rejected_high_risk"),
+        (["atomic_hunk_isolated", "ast_syntax_verified_clean"], "patch_quality_grade_a"),
+        # Calibration split (12..15) - strictly disjoint
+        (["blast_radius_files_1", "regression_probability_low"], "patch_quality_grade_a"),
+        (["blast_radius_files_10", "breaking_change_signature_detected"], "patch_quality_rejected_high_risk"),
+        (["quality_metric_1", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["quality_metric_20", "regression_probability_high"], "patch_quality_rejected_high_risk"),
+        # Validation split (16..19) - strictly disjoint
+        (["blast_radius_files_2", "regression_probability_low"], "patch_quality_grade_a"),
+        (["blast_radius_files_12", "breaking_change_signature_detected"], "patch_quality_rejected_high_risk"),
+        (["quality_metric_5", "backward_compatibility_preserved"], "patch_quality_grade_a"),
+        (["quality_metric_15", "regression_probability_high"], "patch_quality_rejected_high_risk"),
+    ],
+    "tool_failure_classifier": [
+        # Train split (0..11)
+        (["suki_class_boundary", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["failure_severity_benign", "action_inspect_stack_trace"], "action_inspect_stack_trace"),
+        (["suki_class_syntax", "failure_requires_code_edit"], "failure_fatal_circuit_breaker"),
+        (["traceback_frame_depth_shallow", "failure_recoverable_by_retry"], "action_inspect_stack_trace"),
+        (["suki_class_precondition", "failure_requires_arg_fix"], "failure_fatal_circuit_breaker"),
+        (["traceback_in_tool_registry", "failure_severity_benign"], "action_inspect_stack_trace"),
+        (["failure_severity_system_critical", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["traceback_in_test_suite", "failure_recoverable_by_retry"], "action_inspect_stack_trace"),
+        (["suki_class_resource", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["recurrent_loop_detected", "action_switch_to_fallback_tool"], "failure_fatal_circuit_breaker"),
+        (["exception_type_called_process_error", "failure_severity_system_critical"], "failure_fatal_circuit_breaker"),
+        (["exception_type_file_not_found", "failure_requires_path_correction"], "action_inspect_stack_trace"),
+        # Calibration split (12..15) - strictly disjoint
+        (["suki_class_hallucination", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["traceback_frame_depth_deep", "action_inspect_stack_trace"], "action_inspect_stack_trace"),
+        (["suki_class_permission", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["exception_type_key_error", "failure_requires_arg_fix"], "failure_fatal_circuit_breaker"),
+        # Validation split (16..19) - strictly disjoint
+        (["suki_class_timeout", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["traceback_in_core_module", "action_inspect_stack_trace"], "action_inspect_stack_trace"),
+        (["exception_type_os_error", "failure_fatal_circuit_breaker"], "failure_fatal_circuit_breaker"),
+        (["exception_type_attribute_error", "failure_requires_code_edit"], "failure_fatal_circuit_breaker"),
+    ],
 }
 
 
@@ -256,9 +356,11 @@ def run_conformal_calibration_pipeline(
             d_mlp=256,
             max_seq_len=64,
         )
+        for trigger, target in rule_dict.items():
+            brain.compile_logic_association(trigger, target)
 
-        # Build exchangeable calibration data using individual triggers from cal_data
-        formatted_cal = [([t], s[1]) for s in cal_data for t in s[0]]
+        # Build exchangeable calibration data using multi-token inputs from cal_data
+        formatted_cal = [(s[0], s[1]) for s in cal_data]
         cal_res = brain.calibrate_conformal(formatted_cal, alpha=alpha, in_sample=False)
         brain.save(target_store)
 
@@ -266,12 +368,11 @@ def run_conformal_calibration_pipeline(
         val_hits = 0
         total_val = 0
         for s in val_data:
-            for t in s[0]:
-                total_val += 1
-                pred = brain.infer_conformal([t], alpha=alpha)
-                # Success if target label is in prediction set or top candidate matches
-                if s[1] in pred.get("prediction_set", []) or pred.get("top_candidate") == s[1]:
-                    val_hits += 1
+            total_val += 1
+            pred = brain.infer_conformal(s[0], alpha=alpha)
+            # Success if target label is in prediction set or top candidate matches
+            if s[1] in pred.get("prediction_set", []) or pred.get("top_candidate") == s[1]:
+                val_hits += 1
 
         empirical_cov = val_hits / total_val if total_val > 0 else 1.0
 

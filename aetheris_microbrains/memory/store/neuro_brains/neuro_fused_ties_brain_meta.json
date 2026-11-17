@@ -144,18 +144,15 @@
     "66": "parameter_harmony",
     "67": "achieved"
   },
-  "conformal_quantile": 0.999458389938809,
+  "conformal_quantile": 0.9995403951616026,
   "conformal_alpha": 0.1,
   "conformal_scores": [
-    0.999458389938809,
-    0.999458389938809,
-    0.9973270371556282,
-    0.9973270371556282,
-    0.19427597522735596,
-    0.19427597522735596
+    0.9995403951616026,
+    0.9986310593085364,
+    0.1264650821685791
   ],
   "conformal_basis": "held_out",
   "hopfield_rules_count": 14,
   "induction_heads": [],
-  "updated_at": 1794953201.6388073
+  "updated_at": 1794955384.1738102
 }
