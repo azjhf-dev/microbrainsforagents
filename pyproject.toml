@@ -44,8 +44,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/drtikov/aetheris-microbrains"
-Repository = "https://github.com/drtikov/aetheris-microbrains.git"
+Homepage = "https://github.com/drtikov/microbrainsforagents"
+Repository = "https://github.com/drtikov/microbrainsforagents.git"
 
 [tool.setuptools.packages.find]
 where = ["."]

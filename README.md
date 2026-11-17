@@ -26,8 +26,8 @@ Zero NVIDIA CUDA required. Zero remote API latency. Zero token cost for routing 
 ## 📦 Installation
 
 ```bash
-git clone https://github.com/drtikov/aetheris-microbrains.git
-cd aetheris-microbrains
+git clone https://github.com/drtikov/microbrainsforagents.git
+cd microbrainsforagents
 pip install -e .
 ```
 
