@@ -54,5 +54,33 @@
     "recalibrated_quantile": 0.0471,
     "empirical_coverage": 0.985,
     "status": "success"
+  },
+  {
+    "ts": "2026-11-17T22:08:33.916607+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0461,
+    "empirical_coverage": 0.985,
+    "status": "success"
+  },
+  {
+    "ts": "2026-11-17T22:10:30.312423+00:00",
+    "domain": "tool_failure_classifier",
+    "tokens_updated": [
+      "weekly_retrain",
+      "context_window_warning_80_pct",
+      "failure_recoverable_by_retry"
+    ],
+    "ewc_penalty": 0.0,
+    "weights_delta_l2": 0.008334,
+    "recalibrated_quantile": 0.0452,
+    "empirical_coverage": 0.985,
+    "status": "success"
   }
 ]

@@ -138,7 +138,7 @@
     "43": "weekly_retrain",
     "44": "context_window_warning_80_pct"
   },
-  "conformal_quantile": 0.0470596,
+  "conformal_quantile": 0.04519603984,
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -170,5 +170,5 @@
   "conformal_basis": "held_out",
   "hopfield_rules_count": 0,
   "induction_heads": [],
-  "updated_at": 1794948595.9644947
+  "updated_at": 1794953430.3114111
 }
