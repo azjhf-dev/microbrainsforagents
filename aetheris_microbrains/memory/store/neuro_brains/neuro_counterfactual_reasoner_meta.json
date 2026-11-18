@@ -121,6 +121,8 @@
     "55": "resilience_buffer_adequate"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -149,8 +151,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "aaa52412f4f9fae1eb62d76acf7911b2219ca74ed5a407c0442c1ad9ce02257b",
   "hopfield_rules_count": 1,
   "induction_heads": [],
-  "updated_at": 1794927691.9945683
+  "updated_at": 1794965900.1768634
 }

@@ -129,6 +129,8 @@
     "59": "distraction_filter_engaged"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -157,8 +159,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "20ab639488c5b0a033a12321db8a126fa64c6ffa4ba12019424146138f360bf2",
   "hopfield_rules_count": 1,
   "induction_heads": [],
-  "updated_at": 1794927691.591916
+  "updated_at": 1794965900.3175797
 }

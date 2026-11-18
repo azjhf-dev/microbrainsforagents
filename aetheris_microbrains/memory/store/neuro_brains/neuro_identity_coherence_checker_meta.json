@@ -121,6 +121,8 @@
     "55": "cultural_resonance_peak"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -149,8 +151,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "e19affbf4d790437496f8b2b442f328617439cafe418c02dd106b69ad1aac3dd",
   "hopfield_rules_count": 1,
   "induction_heads": [],
-  "updated_at": 1794927691.8345888
+  "updated_at": 1794965900.2888567
 }

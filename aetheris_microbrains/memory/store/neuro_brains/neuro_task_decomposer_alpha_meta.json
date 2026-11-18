@@ -67,6 +67,8 @@
     "28": "task_graph_dag_built"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.01,
@@ -75,9 +77,12 @@
     0.04,
     0.05
   ],
+  "n_calibration_samples": 5,
+  "coverage_std_error": 0.1134,
+  "conformal_guarantee_valid": false,
   "conformal_basis": "held_out",
+  "weights_sha256": "3b82cd77d8670452723429b81cfe46473b22bf906830b11a96e5d8a84a130058",
   "hopfield_rules_count": 1,
   "induction_heads": [],
-  "updated_at": 1794946378.9060183,
-  "calibration_q_hat": 0.05
+  "updated_at": 1794965900.5012372
 }

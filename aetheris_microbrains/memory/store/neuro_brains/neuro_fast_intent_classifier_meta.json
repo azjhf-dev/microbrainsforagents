@@ -347,6 +347,30 @@
     "168": "crash_dump"
   },
   "conformal_quantile": 0.10221177339553833,
+  "per_class_quantiles": {
+    "debug": 0.098257,
+    "repo_read": 0.102212,
+    "repo_write": 0.102212,
+    "git_commit": 0.102212,
+    "run_tests": 0.102212,
+    "web_search": 0.102212,
+    "refactor": 0.090128,
+    "memory_recall": 0.102212,
+    "system_audit": 0.102212,
+    "run_shell": 0.102212
+  },
+  "per_class_counts": {
+    "debug": 3,
+    "repo_read": 2,
+    "repo_write": 2,
+    "git_commit": 2,
+    "run_tests": 2,
+    "web_search": 2,
+    "refactor": 3,
+    "memory_recall": 2,
+    "system_audit": 2,
+    "run_shell": 2
+  },
   "conformal_alpha": 0.05,
   "conformal_scores": [
     0.09825742244720459,
@@ -373,9 +397,11 @@
     0.10208207368850708
   ],
   "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "08c5e55692e6f1da74280daab2732ef64c4ca1e8aae219eb143d151ec26cbad2",
   "hopfield_rules_count": 102,
   "induction_heads": [],
-  "updated_at": 1794964362.1934786
+  "updated_at": 1794965900.223534
 }

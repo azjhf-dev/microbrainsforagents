@@ -21,14 +21,15 @@ Agent Input (tool call, diff, shell command, or intent query)
  │    • Protected paths (memory/bible.md, constitution/, etc.) ── veto → deny / escalate
  │
  ├─ Layer 1: Structural Language & Shell Parsers (replaces substring matching)
- │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, ignores comments)
- │    • Catches direct eval/exec, subprocess(shell=True), shutil.rmtree, pickle.loads, aliases, getattr obfuscation
+ │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, supports file_content alias context, ignores comments)
+ │    • Catches direct eval/exec, subprocess(shell=True), shutil.rmtree, pickle.loads, aliases, subscript (__builtins__/globals), encoded decode-to-exec, and getattr obfuscation
  │    • JSON / TypeScript / JS diffs parsed without false Python SyntaxErrors
- │    • Shell shlex tokenizer (`rm -rf`, `dd of=/dev/...`, `curl | sh`, `format` cmd vs `git --format` flags)
+ │    • Allowlist-first shell shlex tokenizer (`rm -rf`, `sh -c`, `python -c`, `dd of=/dev/...`, `curl | sh` deny; unrecognized cmds escalate; `ls`, `pwd`, `git log --format`, `clang-format` allow)
+ │    • Risk-class fail-closed handling + structured decision journaling & `shadow_mode`
  │
  ├─ Layer 2: Soft Micro-Classifier & Split-Conformal Abstention
- │    • Deterministic SHA-256 context embeddings + analytical Hopfield/Attention weight matrices
- │    • Held-out split-conformal calibration (n_cal = 22 >= 19 for 1 - alpha = 95% finite-sample coverage)
+ │    • Deterministic SHA-256 bilingual (RU/EN) char-trigram + lexical routing, constrained to `available_tools` + MCP-Zero Top-K narrowing (`narrow_tool_surface`)
+ │    • Held-out split-conformal & Mondrian per-class calibration (n_cal = 22 >= 19 for 1 - alpha = 95% coverage) + SHA-256 weight checksums
  │    • Singleton set (|C_alpha| == 1) → local allow; OOD / ambiguous (|C_alpha| != 1) → escalate
  │
  └─ Layer 3: Remote LLM / Human Confirmation (fallback handler)
@@ -139,12 +140,14 @@ Run the verification suites (including the regression probes for AST parsing, `s
 pytest aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
 ```
 
-### Split-Conformal Coverage Discipline (`conformal_collector.py`):
+### Split-Conformal & Mondrian Coverage Discipline (`conformal_collector.py`):
 * Disjoint partitions per active domain: **30+ Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05$, giving 95% nominal split-conformal coverage), and **16 Held-Out Validation** samples with $\text{Train} \cap \text{Cal} = \text{Train} \cap \text{Val} = \text{Cal} \cap \text{Val} = \emptyset$.
-* Honest provenance: any model with insufficient calibration samples reports `conformal_guarantee_valid = False`.
+* Honest uncertainty reporting: Mondrian `per_class_quantiles`, finite-sample coverage standard error $\sqrt{\alpha(1-\alpha)/(n+2)}$, Rule-of-3 upper risk bound $3/n$, SHA-256 `weights_sha256` verification on load, and `conformal_guarantee_valid = False` whenever calibration samples are insufficient.
+* Staged candidate-gate continual learning (`_candidates/` $\to$ `verify_and_promote_candidate` $\to$ `_rollback/` snapshot) prevents self-poisoning loops.
 
-### Synthetic Adversarial Regression (200 Cases) & Shadow Pilot (120 Queries):
-* Synthetic adversarial checks (`test_adversarial_safety_suite.py`) and independent obfuscation/benign diff probes (`test_reviewer_probe_suite.py`) verify Layer 1–2 behavior on syntax errors, dynamic obfuscation (`getattr`, aliasing, `pickle.loads`, `subprocess(..., shell=True)`), and safe hunks (indented fragments, `except SyntaxError:`, comments with `eval(`, TypeScript, JSON, 250-line data tables).
+### Layer Ablation, Baseline Comparison, Adversarial & Probe Suites:
+* Layer 0 / 0+1 / 0+1+2 ablation, bilingual RU/EN baseline comparisons, MCP-Zero narrowing (`narrow_tool_surface`), risk-class fail-closed handling, `shadow_mode` journaling, Mondrian thresholds, checksum tamper rejection, and staged candidate rollback (`test_layer_ablation_and_baselines.py`).
+* Synthetic adversarial checks (`test_adversarial_safety_suite.py`) and independent obfuscation/benign diff probes (`test_reviewer_probe_suite.py`) verify Layer 1–2 behavior across obfuscated Python/shell inputs and safe hunks.
 * `test_colony_swe_shadow.py` compares 3 configurations (Pure Rules vs. Pure Neural Weights vs. Hybrid with Conformal OOD Gate) under strict target matching (`decision == target`) across 120 bilingual (60 RU / 60 EN) SWE prompts.
 
 ---

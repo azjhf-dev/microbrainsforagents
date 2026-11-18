@@ -17,7 +17,9 @@ from .core.layered_decision_engine import (
     analyze_shell_command,
     decide,
     evaluate_layer0_policy,
+    get_recent_decision_journal,
     is_protected_path,
+    record_decision_journal,
 )
 from .core.opencl_microbrain_accelerator import (
     OpenCLMicroBrainAccelerator,
@@ -87,6 +89,7 @@ from .core.tool_routing_moe import (
     ToolRoutingMoE,
     MoERoutingDecision,
     get_tool_routing_moe,
+    narrow_tool_surface,
 )
 from .core.critical_ensemble_abstention import (
     CriticalEnsemble,
@@ -141,7 +144,10 @@ __all__ = [
     "analyze_code_diff",
     "analyze_shell_command",
     "evaluate_layer0_policy",
+    "get_recent_decision_journal",
     "is_protected_path",
+    "record_decision_journal",
+    "narrow_tool_surface",
     "OpenCLMicroBrainAccelerator",
     "get_opencl_accelerator",
     "DendriticTreeMicroBrain",

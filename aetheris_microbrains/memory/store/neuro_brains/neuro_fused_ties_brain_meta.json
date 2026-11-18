@@ -235,6 +235,18 @@
     "112": "ties_dir_step"
   },
   "conformal_quantile": 0.16631925106048584,
+  "per_class_quantiles": {
+    "ties_consensus": 0.119251,
+    "resolve_sign_conflict": 0.166319,
+    "prune_interference": 0.103132,
+    "deploy_ties_brain": 0.166319
+  },
+  "per_class_counts": {
+    "ties_consensus": 8,
+    "resolve_sign_conflict": 7,
+    "prune_interference": 6,
+    "deploy_ties_brain": 1
+  },
   "conformal_alpha": 0.05,
   "conformal_scores": [
     0.11335057020187378,
@@ -261,9 +273,11 @@
     0.09988993406295776
   ],
   "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "eaf0909711b3b6d8e2d71aa0876d39a248dcfaa155c7c6167a6138907115ad3d",
   "hopfield_rules_count": 59,
   "induction_heads": [],
-  "updated_at": 1794964362.4183578
+  "updated_at": 1794965900.2501767
 }

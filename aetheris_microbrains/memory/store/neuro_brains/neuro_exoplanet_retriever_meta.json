@@ -15,12 +15,18 @@
     "2": "<eos>"
   },
   "conformal_quantile": null,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [],
+  "n_calibration_samples": 0,
+  "coverage_std_error": 0.0,
+  "conformal_guarantee_valid": false,
   "conformal_basis": "uncalibrated",
+  "weights_sha256": "3c19206e6540c3ae1a37a3c15618d9d847748b527b41b85642b82b0b74bce23e",
   "hopfield_rules_count": 0,
   "induction_heads": [
     0
   ],
-  "updated_at": 1794938567.5390422
+  "updated_at": 1794965900.2099884
 }

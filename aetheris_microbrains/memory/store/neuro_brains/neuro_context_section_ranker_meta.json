@@ -111,6 +111,8 @@
     "50": "salience_gradient_smooth"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -139,8 +141,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "a187c3f7f2d227c5063874aa2ab89e1f6c1dd007e2ebb7eb9e2aae94cf9a7710",
   "hopfield_rules_count": 2,
   "induction_heads": [],
-  "updated_at": 1794930390.7326305
+  "updated_at": 1794965900.1587293
 }

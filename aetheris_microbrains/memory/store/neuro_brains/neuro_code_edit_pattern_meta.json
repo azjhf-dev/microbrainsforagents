@@ -109,6 +109,8 @@
     "49": "fetch_blackboard"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -137,10 +139,14 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "e84ac33bd7d34f1eb0ad1bd2cf543e4fd8f97b745a527c0e70589fe3eaa02aa7",
   "hopfield_rules_count": 25,
   "induction_heads": [
     0
   ],
-  "updated_at": 1794927690.8344662
+  "updated_at": 1794965900.0473979
 }

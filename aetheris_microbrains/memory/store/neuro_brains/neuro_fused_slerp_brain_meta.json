@@ -237,6 +237,18 @@
     "113": "blocked"
   },
   "conformal_quantile": 0.12015283107757568,
+  "per_class_quantiles": {
+    "balanced_hybrid": 0.116287,
+    "preserve_manifold": 0.109621,
+    "commit_fused_weights": 0.120153,
+    "reject_fusion": 0.105878
+  },
+  "per_class_counts": {
+    "balanced_hybrid": 8,
+    "preserve_manifold": 5,
+    "commit_fused_weights": 6,
+    "reject_fusion": 3
+  },
   "conformal_alpha": 0.05,
   "conformal_scores": [
     0.11196863651275635,
@@ -263,9 +275,11 @@
     0.11812746524810791
   ],
   "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "58352f5063624c6dcae8cd290ea50405153bb93eb07d134ffb9fe4fe5b3a7b0a",
   "hopfield_rules_count": 59,
   "induction_heads": [],
-  "updated_at": 1794964362.3755622
+  "updated_at": 1794965900.2410958
 }

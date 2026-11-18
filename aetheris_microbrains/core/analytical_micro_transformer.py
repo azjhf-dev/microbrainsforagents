@@ -21,13 +21,17 @@ Architecture:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import math
 import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 _PKG_STORE_DIR = Path(__file__).resolve().parents[1] / "memory" / "store" / "neuro_brains"
 _CWD_STORE_DIR = Path("memory/store/neuro_brains")
@@ -87,12 +91,16 @@ class AnalyticalMicroTransformer:
         self.hopfield_keys: List[np.ndarray] = []
         self.hopfield_values: List[np.ndarray] = []
 
-        # 5. Proposal 5: Split-Conformal Prediction & Calibrated Abstention
+        # 5. Proposal 5: Split-Conformal & Mondrian Prediction, Statistical Bounds, and Checksums
         self.conformal_quantile: Optional[float] = None
+        self.per_class_quantiles: Dict[str, float] = {}
+        self.per_class_counts: Dict[str, int] = {}
         self.conformal_alpha: float = 0.05
         self.conformal_scores: List[float] = []
         self.n_calibration_samples: int = 0
+        self.coverage_std_error: float = 0.0
         self.conformal_guarantee_valid: bool = False
+        self.weights_sha256: Optional[str] = None
         # How the current conformal_quantile was obtained — honest provenance
         # for the quantile, which otherwise looks calibrated no matter what.
         self.conformal_basis: str = "uncalibrated"
@@ -388,32 +396,51 @@ class AnalyticalMicroTransformer:
         in_sample: bool = False,
     ) -> Dict[str, Any]:
         """
-        Calibrate split-conformal prediction threshold q_hat at miscoverage level alpha.
-        The finite-sample coverage guarantee P(y* in C(x)) >= 1 - alpha holds ONLY
-        for exchangeable held-out calibration data — an in-sample calibration
-        (calibrating on the model's own compiled rules) provides no such guarantee
-        and is recorded as such via `basis`.
+        Calibrate split-conformal and Mondrian (per-class) prediction thresholds
+        at miscoverage level alpha.
+
+        Finite-sample coverage P(y* in C(x)) >= 1 - alpha holds ONLY for exchangeable
+        held-out calibration data. Also reports coverage standard error
+        sqrt(alpha*(1-alpha)/(n+2)) and Rule-of-3 upper bound 3/n on zero errors.
         """
         if not calibration_data:
             return {"status": "error", "reason": "empty_calibration_data"}
 
         scores: List[float] = []
+        class_scores: Dict[str, List[float]] = {}
         for inp, target in calibration_data:
             probs = self.get_token_probabilities(inp)
             p_target = float(probs.get(target, 0.0))
             s_i = 1.0 - p_target
             scores.append(float(s_i))
+            class_scores.setdefault(str(target), []).append(float(s_i))
 
         n = len(scores)
         q_level = min(1.0, math.ceil((n + 1) * (1.0 - float(alpha))) / float(n))
         q_hat = float(np.quantile(scores, q_level))
+
+        per_class_quantiles: Dict[str, float] = {}
+        per_class_counts: Dict[str, int] = {}
+        for cls_lbl, cls_vals in class_scores.items():
+            n_cls = len(cls_vals)
+            per_class_counts[cls_lbl] = n_cls
+            c_level = min(1.0, math.ceil((n_cls + 1) * (1.0 - float(alpha))) / float(n_cls))
+            c_q = float(np.quantile(cls_vals, c_level))
+            # Record per-class finite-sample quantile for Mondrian calibration
+            per_class_quantiles[cls_lbl] = round(float(c_q if n_cls >= 3 else max(q_hat, c_q)), 6)
+
         min_required = max(1, math.ceil(1.0 / max(1e-6, float(alpha))) - 1)
         guarantee_valid = (not in_sample) and (n >= min_required)
+        cov_std_err = round(math.sqrt(max(0.0, float(alpha) * (1.0 - float(alpha))) / float(n + 2)), 4)
+        upper_bound_rule3 = round(3.0 / float(max(1, n)), 4)
 
         self.conformal_quantile = q_hat
+        self.per_class_quantiles = per_class_quantiles
+        self.per_class_counts = per_class_counts
         self.conformal_alpha = float(alpha)
         self.conformal_scores = scores
         self.n_calibration_samples = n
+        self.coverage_std_error = cov_std_err
         self.conformal_guarantee_valid = guarantee_valid
         self.conformal_basis = "in_sample_auto" if in_sample else "held_out"
 
@@ -426,6 +453,9 @@ class AnalyticalMicroTransformer:
             "alpha": float(alpha),
             "target_coverage": 1.0 - float(alpha),
             "quantile_q_hat": round(q_hat, 4),
+            "per_class_quantiles": per_class_quantiles,
+            "coverage_std_error": cov_std_err,
+            "upper_error_bound_rule_of_3": upper_bound_rule3,
             "mean_nonconformity": round(float(np.mean(scores)), 4),
             "basis": self.conformal_basis,
         }
@@ -434,20 +464,17 @@ class AnalyticalMicroTransformer:
         self,
         input_tokens: List[str],
         alpha: Optional[float] = None,
+        mondrian: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
-        Conformal inference with calibrated abstention:
-        Builds prediction set C_alpha(x) = { y in Vocab : 1 - P(y) <= q_hat }.
-        - If |C_alpha| == 1: singleton prediction (high confidence), abstain=False.
-        - If |C_alpha| > 1: ambiguous prediction (epistemic uncertainty), abstain=True.
-        - If |C_alpha| == 0: out-of-distribution (OOD) input, abstain=True.
+        Conformal inference with optional Mondrian per-class thresholds & calibrated abstention:
+        Builds prediction set C_alpha(x) = { y in Vocab : 1 - P(y) <= q_y }.
+        When `mondrian is None`, applies class-conditional thresholds only for classes with
+        n_cls >= min_required (where the per-class finite-sample quantile is defined).
         """
         q_hat = self.conformal_quantile
         uncalibrated = q_hat is None
         if q_hat is None:
-            # Self-calibrate on known hopfield rules if available. This is
-            # IN-SAMPLE (train == calibration set), so it must not claim the
-            # held-out coverage guarantee.
             if self.hopfield_keys:
                 auto_cal: List[Tuple[List[str], str]] = []
                 for idx, k_vec in enumerate(self.hopfield_keys):
@@ -462,26 +489,37 @@ class AnalyticalMicroTransformer:
                     q_hat = self.conformal_quantile
                     uncalibrated = False
             if q_hat is None:
-                # No calibration data exists: ride the neutral default, but
-                # disclose it — the old bare fallback was indistinguishable in
-                # its output from a genuinely measured q_hat of 0.50.
                 q_hat = 0.50
 
-        # Proposal 3 & 4: Deterministic sorting and Conformal OOD Coverage gating
-        # Calculate vocabulary coverage to prevent guessing on OOD inputs
         n_tokens = len(input_tokens) if input_tokens else 0
         known_tokens = sum(1 for t in input_tokens if t in self.vocab and not t.startswith("<")) if input_tokens else 0
         token_coverage = (known_tokens / n_tokens) if n_tokens > 0 else 1.0
 
         probs = self.get_token_probabilities(input_tokens)
-        # Deterministic tie-breaking on equal probabilities (Proposal 4)
         sorted_probs = sorted(probs.items(), key=lambda kv: (-kv[1], str(kv[0])))
 
-        prediction_set = [tok for tok, p in sorted_probs if (1.0 - p) <= q_hat]
+        effective_alpha = float(alpha) if alpha is not None else self.conformal_alpha
+        n_cal = getattr(self, "n_calibration_samples", len(self.conformal_scores))
+        min_req = max(1, math.ceil(1.0 / max(1e-6, effective_alpha)) - 1)
+        mondrian_map = self.per_class_quantiles if (not uncalibrated and self.per_class_quantiles) else {}
+        cls_counts = getattr(self, "per_class_counts", {}) or {}
+
+        def _threshold_for(tok: str) -> float:
+            if mondrian is False:
+                return float(q_hat)
+            if mondrian is True and str(tok) in mondrian_map:
+                return float(mondrian_map[str(tok)])
+            if str(tok) in mondrian_map and int(cls_counts.get(str(tok), 0)) >= min_req:
+                return float(mondrian_map[str(tok)])
+            return float(q_hat)
+
+        prediction_set = [
+            tok for tok, p in sorted_probs
+            if (1.0 - p) <= _threshold_for(tok)
+        ]
         top_tok, top_p = sorted_probs[0] if sorted_probs else ("<unk>", 0.0)
         set_size = len(prediction_set)
 
-        # OOD Gate: if less than 50% of input tokens are known to the vocabulary, abstain immediately
         if token_coverage < 0.50 and n_tokens > 0:
             abstained = True
             reason = "ood_coverage_breach"
@@ -499,10 +537,12 @@ class AnalyticalMicroTransformer:
             reason = "ood"
             selected_token = "<abstain>"
 
-        effective_alpha = float(alpha) if alpha is not None else self.conformal_alpha
-        n_cal = getattr(self, "n_calibration_samples", len(self.conformal_scores))
-        min_req = max(1, math.ceil(1.0 / max(1e-6, effective_alpha)) - 1)
         guarantee_valid = (not uncalibrated) and (self.conformal_basis == "held_out") and (n_cal >= min_req)
+        cov_std = round(
+            float(getattr(self, "coverage_std_error", 0.0))
+            or (math.sqrt(max(0.0, effective_alpha * (1.0 - effective_alpha)) / float(max(1, n_cal + 2))) if n_cal > 0 else 0.0),
+            4,
+        )
 
         return {
             "prediction_set": prediction_set,
@@ -515,10 +555,13 @@ class AnalyticalMicroTransformer:
             "confidence": round(float(top_p), 4),
             "token_coverage": round(float(token_coverage), 4),
             "conformal_quantile": round(float(q_hat), 4),
+            "per_class_quantiles": dict(mondrian_map),
+            "coverage_std_error": cov_std,
             "calibrated": not uncalibrated,
             "calibration_basis": "uncalibrated_default" if uncalibrated else self.conformal_basis,
             "n_calibration_samples": n_cal,
             "conformal_guarantee_valid": guarantee_valid,
+            "weights_sha256": getattr(self, "weights_sha256", None),
             "alpha": effective_alpha,
             "model_name": self.name,
         }
@@ -539,15 +582,21 @@ class AnalyticalMicroTransformer:
         if isinstance(self.W_mlp, np.ndarray):
             arrays["W_mlp"] = self.W_mlp
         if self.hopfield_keys:
-            # Persist compiled Hopfield rules — the old save() dropped them, so
-            # a reloaded brain silently lost every rule (hopfield_rules_count
-            # went to 0 and conformal auto-calibration degraded with it).
             arrays["hopfield_keys"] = np.stack(self.hopfield_keys, axis=0)
             arrays["hopfield_values"] = np.stack(self.hopfield_values, axis=0)
 
-        # Atomic NPZ write
+        # Atomic NPZ write + SHA-256 integrity digest
         np.savez_compressed(tmp_weights, **arrays)
         tmp_weights.replace(weights_file)
+        weights_sha256 = hashlib.sha256(weights_file.read_bytes()).hexdigest()
+        self.weights_sha256 = weights_sha256
+
+        n_cal = getattr(self, "n_calibration_samples", len(self.conformal_scores))
+        cov_std = round(
+            float(getattr(self, "coverage_std_error", 0.0))
+            or (math.sqrt(max(0.0, self.conformal_alpha * (1.0 - self.conformal_alpha)) / float(max(1, n_cal + 2))) if n_cal > 0 else 0.0),
+            4,
+        )
 
         meta = {
             "name": self.name,
@@ -558,11 +607,15 @@ class AnalyticalMicroTransformer:
             "vocab": self.vocab,
             "inv_vocab": {str(k): v for k, v in self.inv_vocab.items()},
             "conformal_quantile": self.conformal_quantile,
+            "per_class_quantiles": dict(getattr(self, "per_class_quantiles", {})),
+            "per_class_counts": dict(getattr(self, "per_class_counts", {})),
             "conformal_alpha": self.conformal_alpha,
             "conformal_scores": self.conformal_scores,
-            "n_calibration_samples": getattr(self, "n_calibration_samples", len(self.conformal_scores)),
+            "n_calibration_samples": n_cal,
+            "coverage_std_error": cov_std,
             "conformal_guarantee_valid": getattr(self, "conformal_guarantee_valid", False),
             "conformal_basis": self.conformal_basis,
+            "weights_sha256": weights_sha256,
             "hopfield_rules_count": len(self.hopfield_keys),
             "induction_heads": list(getattr(self, "induction_heads", [])),
             "updated_at": time.time(),
@@ -586,7 +639,12 @@ class AnalyticalMicroTransformer:
                         pass
 
     @classmethod
-    def load(cls, name: str, directory: Optional[Path] = None) -> Optional[AnalyticalMicroTransformer]:
+    def load(
+        cls,
+        name: str,
+        directory: Optional[Path] = None,
+        verify_checksum: bool = True,
+    ) -> Optional[AnalyticalMicroTransformer]:
         search_dirs = [directory] if directory else []
         search_dirs.extend([STORE_DIR] + CANONICAL_STORE_DIRS)
 
@@ -609,6 +667,15 @@ class AnalyticalMicroTransformer:
             with open(meta_file, "r", encoding="utf-8") as f:
                 meta = json.load(f)
 
+            expected_sha = meta.get("weights_sha256")
+            actual_sha = hashlib.sha256(weights_file.read_bytes()).hexdigest()
+            if verify_checksum and expected_sha and actual_sha != expected_sha:
+                log.warning(
+                    "Checksum mismatch for microbrain '%s' (%s): expected %s, got %s",
+                    name, weights_file, expected_sha[:12], actual_sha[:12],
+                )
+                return None
+
             obj = cls(
                 name=meta["name"],
                 d_model=meta["d_model"],
@@ -629,8 +696,6 @@ class AnalyticalMicroTransformer:
                     obj.W_mlp = data["W_mlp"]
                 obj.W_embed = data["W_embed"]
                 if "hopfield_keys" in data:
-                    # Restore compiled rules saved by save() (absent in legacy
-                    # artifacts, which genuinely lost them).
                     hk = data["hopfield_keys"]
                     hv = data["hopfield_values"]
                     obj.hopfield_keys = [hk[i].copy() for i in range(hk.shape[0])]
@@ -638,12 +703,16 @@ class AnalyticalMicroTransformer:
             obj.vocab = meta["vocab"]
             obj.inv_vocab = {int(k): v for k, v in meta["inv_vocab"].items()}
             obj.conformal_quantile = meta.get("conformal_quantile")
+            obj.per_class_quantiles = {str(k): float(v) for k, v in meta.get("per_class_quantiles", {}).items()}
+            obj.per_class_counts = {str(k): int(v) for k, v in meta.get("per_class_counts", {}).items()}
             obj.conformal_alpha = float(meta.get("conformal_alpha", 0.05))
             obj.conformal_scores = list(meta.get("conformal_scores", []))
             obj.n_calibration_samples = int(meta.get("n_calibration_samples", len(obj.conformal_scores)))
+            obj.coverage_std_error = float(meta.get("coverage_std_error", 0.0))
             obj.conformal_basis = str(meta.get("conformal_basis", "uncalibrated"))
             min_req = max(1, math.ceil(1.0 / max(1e-6, obj.conformal_alpha)) - 1)
             obj.conformal_guarantee_valid = bool(meta.get("conformal_guarantee_valid", obj.conformal_basis == "held_out" and obj.n_calibration_samples >= min_req))
+            obj.weights_sha256 = actual_sha
             obj.induction_heads = list(meta.get("induction_heads", []))
             return obj
         except Exception:

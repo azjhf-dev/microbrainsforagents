@@ -101,6 +101,8 @@
     "45": "weekly_retrain"
   },
   "conformal_quantile": 0.03271279061599962,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -129,8 +131,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "a658b56efa6fa1bfd07d6e7b7f6e0bdf3aa2b5331006685be9a5694a2fa540af",
   "hopfield_rules_count": 0,
   "induction_heads": [],
-  "updated_at": 1794946304.3519826
+  "updated_at": 1794965900.2024422
 }

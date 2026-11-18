@@ -79,6 +79,8 @@
     "34": "cluster_density_high"
   },
   "conformal_quantile": 0.0125,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -102,8 +104,12 @@
     0.019,
     0.02
   ],
+  "n_calibration_samples": 20,
+  "coverage_std_error": 0.064,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "5c858e4c92ec4fee29d5b1ad5b793b42b8523cf041c71fbf77292e4c761890d1",
   "hopfield_rules_count": 0,
   "induction_heads": [],
-  "updated_at": 1794917989.9035916
+  "updated_at": 1794965900.3606143
 }

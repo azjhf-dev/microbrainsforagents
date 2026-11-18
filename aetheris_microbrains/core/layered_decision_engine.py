@@ -23,18 +23,22 @@ Contract:
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
 import shlex
 import textwrap
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Deque, Dict, List, Optional, Sequence, Set, Tuple
 
-RULES_VERSION = "2.0.0-layered-structural"
-DEFAULT_MODEL_VERSION = "analytical-wsp-v2"
+RULES_VERSION = "2.1.0-layered-structural"
+DEFAULT_MODEL_VERSION = "analytical-wsp-v2.1"
+DEFAULT_JOURNAL_PATH = Path(__file__).resolve().parents[1] / "memory" / "decision_journal.jsonl"
+_DECISION_RING_BUFFER: Deque[Dict[str, Any]] = deque(maxlen=500)
 
 # Tool risk taxonomy (Layer 0)
 TOOL_RISK_CLASSES: Dict[str, str] = {
@@ -187,16 +191,69 @@ def _const_str(node: ast.AST) -> Optional[str]:
 
 
 class _SecurityASTVisitor(ast.NodeVisitor):
-    """AST security analyzer catching direct, aliased, and getattr-obfuscated sinks."""
+    """AST security analyzer catching direct, aliased, subscript, encoded, and getattr sinks."""
 
     DANGEROUS_BUILTINS = {"eval", "exec", "compile", "__import__"}
     DANGEROUS_ATTRS = {"system", "popen", "rmtree", "loads", "load", "unsafe_load", "spawn"}
-    DANGEROUS_MODULES = {"os", "subprocess", "shutil", "pickle", "cpickle", "marshal", "shelve", "pty", "builtins", "__builtins__"}
+    DANGEROUS_MODULES = {
+        "os", "subprocess", "shutil", "pickle", "cpickle", "marshal", "shelve",
+        "pty", "builtins", "__builtins__", "importlib",
+    }
+    SUBSCRIPT_SCOPE_NAMES = {"__builtins__", "builtins", "globals", "locals", "vars"}
 
     def __init__(self) -> None:
         self.findings: List[str] = []
         self.dangerous_aliases: Set[str] = set()
         self.module_aliases: Dict[str, str] = {}
+        self.decoded_vars: Set[str] = set()
+
+    @staticmethod
+    def _is_decode_call(node: ast.AST) -> bool:
+        """Return True if node represents base64/codecs/hex decoding (including `.decode()` chain)."""
+        cur = node
+        if (
+            isinstance(cur, ast.Call)
+            and isinstance(cur.func, ast.Attribute)
+            and cur.func.attr == "decode"
+            and isinstance(cur.func.value, ast.Call)
+        ):
+            cur = cur.func.value
+        if isinstance(cur, ast.Call) and isinstance(cur.func, ast.Attribute):
+            attr = cur.func.attr
+            base = cur.func.value.id.lower() if isinstance(cur.func.value, ast.Name) else ""
+            if (base in {"base64", "codecs"} and attr in {"b64decode", "urlsafe_b64decode", "decodebytes", "decode"}) or (
+                base == "bytes" and attr == "fromhex"
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _check_subscript_lookup(cls, node: ast.Subscript) -> Optional[str]:
+        val = node.value
+        is_scope = False
+        if isinstance(val, ast.Name) and val.id in cls.SUBSCRIPT_SCOPE_NAMES:
+            is_scope = True
+        elif isinstance(val, ast.Call) and isinstance(val.func, ast.Name) and val.func.id in cls.SUBSCRIPT_SCOPE_NAMES:
+            is_scope = True
+        if not is_scope:
+            return None
+        key = _const_str(node.slice)
+        if key is None or key in cls.DANGEROUS_BUILTINS or key in cls.DANGEROUS_ATTRS or key in {"getattr", "import_module", "open"}:
+            return key or "<dynamic>"
+        return None
+
+    def _uses_decoded_payload(self, args: List[ast.AST]) -> bool:
+        for arg in args:
+            if isinstance(arg, ast.Name) and arg.id in self.decoded_vars:
+                return True
+            if self._is_decode_call(arg):
+                return True
+            for sub in ast.walk(arg):
+                if isinstance(sub, ast.Name) and sub.id in self.decoded_vars:
+                    return True
+                if self._is_decode_call(sub):
+                    return True
+        return False
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -211,7 +268,10 @@ class _SecurityASTVisitor(ast.NodeVisitor):
         for alias in node.names:
             name_lower = alias.name.lower()
             as_name = alias.asname or alias.name
-            if name_lower in self.DANGEROUS_BUILTINS or (mod in self.DANGEROUS_MODULES and name_lower in {"system", "popen", "rmtree", "run", "call", "check_output", "loads", "load", "remove", "unlink"}):
+            if name_lower in self.DANGEROUS_BUILTINS or (
+                mod in self.DANGEROUS_MODULES
+                and name_lower in {"system", "popen", "rmtree", "run", "call", "check_output", "loads", "load", "remove", "unlink", "import_module"}
+            ):
                 self.dangerous_aliases.add(as_name)
         self.generic_visit(node)
 
@@ -225,19 +285,37 @@ class _SecurityASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _check_alias_assignment(self, targets: List[ast.AST], value: ast.AST) -> None:
+        if self._is_decode_call(value):
+            for tgt in targets:
+                if isinstance(tgt, ast.Name):
+                    self.decoded_vars.add(tgt.id)
+
         is_dangerous_rhs = False
         if isinstance(value, ast.Name) and (value.id in self.DANGEROUS_BUILTINS or value.id in self.dangerous_aliases):
             is_dangerous_rhs = True
-        elif isinstance(value, ast.Attribute) and value.attr in {"system", "popen", "rmtree", "loads", "run", "call"}:
+        elif isinstance(value, ast.Attribute) and value.attr in {"system", "popen", "rmtree", "loads", "run", "call", "import_module"}:
             is_dangerous_rhs = True
-        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "getattr":
+        elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id in {"getattr", "__import__"}:
             is_dangerous_rhs = True
+        elif isinstance(value, ast.Subscript):
+            sub_key = self._check_subscript_lookup(value)
+            if sub_key is not None:
+                is_dangerous_rhs = True
+                self.findings.append(f"obfuscated_subscript_builtin:{sub_key}")
 
         if is_dangerous_rhs:
             for tgt in targets:
                 if isinstance(tgt, ast.Name):
                     self.dangerous_aliases.add(tgt.id)
                     self.findings.append(f"dangerous_alias:{tgt.id}")
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        sub_key = self._check_subscript_lookup(node)
+        if sub_key is not None:
+            flag = f"obfuscated_subscript_builtin:{sub_key}"
+            if flag not in self.findings:
+                self.findings.append(flag)
+        self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
@@ -246,8 +324,12 @@ class _SecurityASTVisitor(ast.NodeVisitor):
         if isinstance(func, ast.Name):
             if func.id in self.DANGEROUS_BUILTINS:
                 self.findings.append(f"dangerous_builtin:{func.id}")
+                if self._uses_decoded_payload(node.args):
+                    self.findings.append("obfuscated_encoded_payload")
             elif func.id in self.dangerous_aliases:
                 self.findings.append(f"aliased_dangerous_call:{func.id}")
+                if self._uses_decoded_payload(node.args):
+                    self.findings.append("obfuscated_encoded_payload")
             elif func.id == "getattr":
                 self._check_getattr(node)
 
@@ -256,6 +338,16 @@ class _SecurityASTVisitor(ast.NodeVisitor):
             if isinstance(func.func, ast.Name) and func.func.id == "getattr":
                 self._check_getattr(func)
                 self.findings.append("obfuscated_dynamic_invocation:getattr")
+            if self._uses_decoded_payload(node.args):
+                self.findings.append("obfuscated_encoded_payload")
+
+        # Case 2b: Direct subscript invocation (`globals()['eval'](...)`, `__builtins__['exec'](...)`)
+        elif isinstance(func, ast.Subscript):
+            sub_key = self._check_subscript_lookup(func)
+            if sub_key is not None:
+                self.findings.append(f"obfuscated_dynamic_subscript_call:{sub_key}")
+                if self._uses_decoded_payload(node.args):
+                    self.findings.append("obfuscated_encoded_payload")
 
         # Case 3: Attribute call (`os.system`, `subprocess.run`, `shutil.rmtree`, `pickle.loads`, ...)
         elif isinstance(func, ast.Attribute):
@@ -265,6 +357,10 @@ class _SecurityASTVisitor(ast.NodeVisitor):
 
             if attr in {"eval", "exec", "system", "popen"}:
                 self.findings.append(f"dangerous_method:{resolved_mod}.{attr}" if resolved_mod else f"dangerous_method:{attr}")
+                if self._uses_decoded_payload(node.args):
+                    self.findings.append("obfuscated_encoded_payload")
+            elif resolved_mod == "importlib" and attr == "import_module":
+                self.findings.append("dynamic_import:importlib.import_module")
             elif resolved_mod == "subprocess" or (isinstance(func.value, ast.Name) and func.value.id == "subprocess"):
                 if attr in {"run", "Popen", "call", "check_output", "check_call", "getoutput", "getstatusoutput"}:
                     has_shell_true = any(
@@ -272,6 +368,8 @@ class _SecurityASTVisitor(ast.NodeVisitor):
                         for kw in node.keywords
                     )
                     self.findings.append("subprocess_shell_true" if has_shell_true else f"subprocess_call:{attr}")
+                    if self._uses_decoded_payload(node.args):
+                        self.findings.append("obfuscated_encoded_payload")
             elif resolved_mod == "shutil" or (isinstance(func.value, ast.Name) and func.value.id == "shutil"):
                 if attr == "rmtree":
                     self.findings.append("destructive_fs_call:shutil.rmtree")
@@ -292,9 +390,14 @@ class _SecurityASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _check_getattr(self, node: ast.Call) -> None:
-        target_obj = node.args[0].id.lower() if node.args and isinstance(node.args[0], ast.Name) else ""
+        target_obj = ""
+        if node.args:
+            if isinstance(node.args[0], ast.Name):
+                target_obj = node.args[0].id.lower()
+            elif isinstance(node.args[0], ast.Call) and isinstance(node.args[0].func, ast.Name):
+                target_obj = node.args[0].func.id.lower()
         attr_str = _const_str(node.args[1]) if len(node.args) >= 2 else None
-        if target_obj in self.DANGEROUS_MODULES:
+        if target_obj in self.DANGEROUS_MODULES or target_obj in self.SUBSCRIPT_SCOPE_NAMES:
             self.findings.append(f"obfuscated_getattr:{target_obj}.{attr_str or '<dynamic>'}")
         elif len(node.args) >= 2 and isinstance(node.args[1], ast.BinOp):
             self.findings.append(f"obfuscated_getattr_concat:{attr_str or '<expr>'}")
@@ -302,17 +405,15 @@ class _SecurityASTVisitor(ast.NodeVisitor):
             self.findings.append(f"obfuscated_getattr_sink:{attr_str}")
 
 
-def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dict[str, Any]:
+def analyze_code_diff(
+    file_path: Optional[str],
+    diff_text: Optional[str],
+    original_source: Optional[str] = None,
+) -> Dict[str, Any]:
     """Layer 1 language-aware structural diff analysis.
 
-    Returns {
-        language: str,
-        syntax_valid: bool,
-        security_clean: bool,
-        findings: list[str],
-        line_count: int,
-        ast_nodes: list[str],
-    }
+    If `original_source` is supplied for Python files, pre-seeds module/alias context
+    from the enclosing file so cross-line alias obfuscation in a hunk is resolved.
     """
     if not diff_text:
         return {
@@ -322,6 +423,7 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             "findings": [],
             "line_count": 0,
             "ast_nodes": [],
+            "context_ast_parsed": False,
         }
 
     path_str = str(file_path or "").strip()
@@ -339,13 +441,11 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             if l.startswith("+"):
                 code_lines.append(l[1:])
             elif l.startswith(" ") and not any(other.startswith("+") and not other.startswith("+++") and len(other) > 1 and other[1] != " " and l.startswith("    ") for other in raw_lines):
-                # Strip single diff context space unless lines are raw unprefixed indentation after a synthetic +
                 code_lines.append(l[1:])
             else:
                 code_lines.append(l)
         extracted = "\n".join(code_lines)
     else:
-        # Handle `+line` fragments without headers or raw indented snippets
         if all(l.startswith("+") or not l.strip() for l in raw_lines if l):
             extracted = "\n".join(l[1:] if l.startswith("+") else l for l in raw_lines)
         else:
@@ -359,7 +459,6 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             json.loads(dedented)
             json_ok = True
         except Exception:
-            # Allow partial JSON diff hunks (e.g. single dependency key-value line) as long as quotes/brackets aren't completely garbage
             json_ok = ('"' in dedented and ":" in dedented) or dedented.strip().startswith(("{", "["))
         return {
             "language": "json",
@@ -368,10 +467,10 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             "findings": [] if json_ok else ["malformed_json_hunk"],
             "line_count": line_count,
             "ast_nodes": [],
+            "context_ast_parsed": False,
         }
 
     if ext in {".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".md", ".yaml", ".yml", ".toml", ".txt", ".c", ".cpp", ".h", ".rs", ".go"}:
-        # Language-appropriate lightweight check (never feed TS/JS/C/YAML into Python ast.parse)
         non_py_findings: List[str] = []
         for ln in dedented.splitlines():
             stripped = ln.strip()
@@ -386,10 +485,29 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             "findings": non_py_findings,
             "line_count": line_count,
             "ast_nodes": [],
+            "context_ast_parsed": False,
         }
 
     # Python (or unspecified code snippet)
+    context_ast_parsed = False
+    seed_visitor: Optional[_SecurityASTVisitor] = None
+    if original_source:
+        orig_tree = _parse_python_with_context(original_source)
+        if orig_tree is not None:
+            seed_visitor = _SecurityASTVisitor()
+            seed_visitor.visit(orig_tree)
+            context_ast_parsed = True
+
     tree = _parse_python_with_context(dedented)
+    if tree is None and original_source:
+        combined = original_source.rstrip("\n") + "\n" + textwrap.indent(dedented, "    ")
+        tree = _parse_python_with_context(combined)
+        if tree is None:
+            combined_top = original_source.rstrip("\n") + "\n" + dedented
+            tree = _parse_python_with_context(combined_top)
+        if tree is not None:
+            context_ast_parsed = True
+
     if tree is None:
         return {
             "language": "python",
@@ -398,9 +516,14 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
             "findings": ["syntax_tree_malformed"],
             "line_count": line_count,
             "ast_nodes": [],
+            "context_ast_parsed": context_ast_parsed,
         }
 
     visitor = _SecurityASTVisitor()
+    if seed_visitor is not None:
+        visitor.module_aliases.update(seed_visitor.module_aliases)
+        visitor.dangerous_aliases.update(seed_visitor.dangerous_aliases)
+        visitor.decoded_vars.update(seed_visitor.decoded_vars)
     visitor.visit(tree)
 
     ast_nodes: List[str] = []
@@ -416,9 +539,10 @@ def analyze_code_diff(file_path: Optional[str], diff_text: Optional[str]) -> Dic
         "language": "python",
         "syntax_valid": True,
         "security_clean": len(visitor.findings) == 0,
-        "findings": visitor.findings,
+        "findings": list(dict.fromkeys(visitor.findings)),
         "line_count": line_count,
         "ast_nodes": list(dict.fromkeys(ast_nodes)),
+        "context_ast_parsed": context_ast_parsed,
     }
 
 
@@ -432,17 +556,99 @@ def _tokenize_shell_segment(seg: str) -> List[str]:
 SAFE_SHELL_COMMANDS: Set[str] = {
     "ls", "pwd", "echo", "cat", "head", "tail", "wc", "sort", "uniq",
     "grep", "rg", "find", "which", "where", "whoami", "date", "env",
-    "clang-format", "black", "ruff", "mypy", "pytest", "python", "python3",
+    "clang-format", "black", "ruff", "mypy", "pytest",
 }
+SAFE_GIT_SUBCOMMANDS: Set[str] = {"status", "log", "diff", "branch", "show", "rev-parse", "describe"}
+
+
+def _has_unsafe_shell_metachar(cmd: str) -> Optional[str]:
+    """Detect unquoted/expandable shell substitution (`$(...)`, backticks) or output redirection."""
+    in_single = False
+    escaped = False
+    i = 0
+    n = len(cmd)
+    while i < n:
+        ch = cmd[i]
+        if escaped:
+            escaped = False
+            i += 1
+            continue
+        if ch == "\\" and not in_single:
+            escaped = True
+            i += 1
+            continue
+        if ch == "'":
+            in_single = not in_single
+            i += 1
+            continue
+        if not in_single:
+            if ch == "`":
+                return "shell_backtick_substitution"
+            if ch == "$" and i + 1 < n and cmd[i + 1] == "(":
+                return "shell_command_substitution"
+        i += 1
+
+    # Output redirection (`>` or `>>`) outside single or double quotes
+    in_single = False
+    in_double = False
+    escaped = False
+    for ch in cmd:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and not in_single:
+            escaped = True
+            continue
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            continue
+        if ch == '"' and not in_single:
+            in_double = not in_double
+            continue
+        if not in_single and not in_double and ch == ">":
+            return "shell_output_redirection"
+    return None
+
+
+def _is_command_allowlisted(exe: str, args: List[str]) -> bool:
+    """Strict Layer 1 allowlist check for a parsed command executable and its arguments."""
+    args_lower = [a.lower() for a in args]
+    if exe in SAFE_SHELL_COMMANDS:
+        if exe == "find" and any(a in {"-exec", "-execdir", "-ok", "-okdir", "-delete"} for a in args_lower):
+            return False
+        if exe == "pytest" and "--capture=sys" in args_lower:
+            return True
+        return True
+    if exe == "git":
+        if not args_lower:
+            return True
+        if any(a == "-c" or a.startswith("--exec") or a == "--ext-diff" for a in args_lower):
+            return False
+        return args_lower[0] in SAFE_GIT_SUBCOMMANDS
+    if exe in {"python", "python3"}:
+        if args_lower in (["--version"], ["-v"]):
+            return True
+        if len(args_lower) >= 2 and args_lower[0] == "-m" and args_lower[1] in {"pytest", "unittest", "py_compile"}:
+            return True
+        return False
+    return False
 
 
 def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
     """Layer 1 structural POSIX/Windows shell parser using shlex tokenization.
 
-    Replaces brittle substring checks (e.g. `'format ' in cmd` blocking `git log --format`).
+    Combines explicit destructive pattern blocking with strict allowlist recognition
+    so unrecognized shell commands escalate rather than auto-allowing.
     """
     if not cmd_str or not str(cmd_str).strip():
-        return {"is_safe": True, "findings": [], "commands": [], "risk_class": "READ_ONLY"}
+        return {
+            "is_safe": True,
+            "allowlisted": True,
+            "unrecognized_commands": [],
+            "findings": [],
+            "commands": [],
+            "risk_class": "READ_ONLY",
+        }
 
     cmd = str(cmd_str).strip()
     lower_cmd = cmd.lower()
@@ -451,14 +657,19 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
     if re.search(r"\b(drop\s+database|truncate\s+table)\b", lower_cmd):
         return {
             "is_safe": False,
+            "allowlisted": False,
+            "unrecognized_commands": [],
             "findings": ["destructive_sql_command"],
             "commands": [cmd.split()[0].lower()],
             "risk_class": "IRREVERSIBLE_DESTRUCTIVE",
         }
 
-    # Split pipelines and chained commands safely
+    findings: List[str] = []
+    meta_finding = _has_unsafe_shell_metachar(cmd)
+    if meta_finding:
+        findings.append(meta_finding)
+
     # First inspect pipe sequences for download-and-execute (`curl ... | sh`)
-    pipe_segments = [s.strip() for s in re.split(r"\|\|", cmd)]
     if "|" in cmd and "||" not in cmd:
         pipes = [_tokenize_shell_segment(p) for p in cmd.split("|")]
         pipe_cmds = [os.path.basename(p[0]).lower() for p in pipes if p]
@@ -468,14 +679,16 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
         ):
             return {
                 "is_safe": False,
+                "allowlisted": False,
+                "unrecognized_commands": pipe_cmds,
                 "findings": ["remote_code_execution_pipe"],
                 "commands": pipe_cmds,
                 "risk_class": "IRREVERSIBLE_DESTRUCTIVE",
             }
 
     subcommands = re.split(r"(?:&&|\|\||;|\|)", cmd)
-    findings: List[str] = []
     parsed_cmds: List[str] = []
+    unrecognized: List[str] = []
 
     for sub in subcommands:
         tokens = _tokenize_shell_segment(sub)
@@ -486,6 +699,9 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
         args = tokens[1:]
         args_lower = [a.lower() for a in args]
 
+        if not _is_command_allowlisted(exe, args):
+            unrecognized.append(exe)
+
         if exe == "rm":
             has_recursive = any(
                 a == "--recursive" or (a.startswith("-") and not a.startswith("--") and ("r" in a or "R" in a))
@@ -493,7 +709,11 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
             )
             dangerous_targets = {"/", "/*", "~", "~/", "$home", "*", "..", "c:\\", "c:/"}
             targets_danger = any(
-                a in dangerous_targets or a.startswith("~/") or a.startswith("/dev/") or a.startswith("/etc")
+                a in dangerous_targets
+                or a.startswith("~/")
+                or a.startswith("/dev/")
+                or a.startswith("/etc")
+                or ".." in a.replace("\\", "/").split("/")
                 for a in args_lower
                 if not a.startswith("-")
             )
@@ -523,16 +743,52 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
             if has_777 and has_root_or_rec:
                 findings.append("dangerous_chmod_777")
 
+        elif exe in {"sh", "bash", "zsh", "dash"}:
+            for idx_arg, a in enumerate(args_lower):
+                if (a == "-c" or (a.startswith("-") and not a.startswith("--") and "c" in a)) and idx_arg + 1 < len(args):
+                    inner_res = analyze_shell_command(args[idx_arg + 1])
+                    if not inner_res["is_safe"]:
+                        findings.extend(inner_res["findings"])
+
+        elif exe in {"python", "python3"}:
+            for idx_arg, a in enumerate(args_lower):
+                if a == "-c" and idx_arg + 1 < len(args):
+                    inline_res = analyze_code_diff("<inline>.py", args[idx_arg + 1])
+                    if not inline_res["syntax_valid"] or not inline_res["security_clean"]:
+                        findings.extend(f"unsafe_inline_python:{f}" for f in inline_res["findings"])
+
     is_safe = len(findings) == 0
+    allowlisted = bool(is_safe and parsed_cmds and len(unrecognized) == 0)
     risk_class = "IRREVERSIBLE_DESTRUCTIVE" if not is_safe else (
-        "READ_ONLY" if all(c in SAFE_SHELL_COMMANDS or (c == "git" and len(cmd.split()) > 1 and cmd.split()[1].lower() in {"status", "log", "diff", "branch", "show"}) for c in parsed_cmds) else "EXTERNAL_ACTION"
+        "READ_ONLY" if allowlisted else "EXTERNAL_ACTION"
     )
     return {
         "is_safe": is_safe,
-        "findings": findings,
+        "allowlisted": allowlisted,
+        "unrecognized_commands": unrecognized,
+        "findings": list(dict.fromkeys(findings)),
         "commands": parsed_cmds,
         "risk_class": risk_class,
     }
+
+
+def record_decision_journal(entry: Dict[str, Any], journal_path: Optional[Path] = None) -> None:
+    """Record structured decision telemetry into ring buffer and optional JSONL journal."""
+    _DECISION_RING_BUFFER.append(dict(entry))
+    target = journal_path or DEFAULT_JOURNAL_PATH
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def get_recent_decision_journal(limit: int = 50) -> List[Dict[str, Any]]:
+    """Return most recent decision journal records from the in-memory ring buffer."""
+    if limit <= 0:
+        return []
+    return list(_DECISION_RING_BUFFER)[-limit:]
 
 
 def decide(
@@ -545,12 +801,12 @@ def decide(
     Args:
         input_data: Either a tool/action dict (`{"tool": ..., "path": ..., "diff": ..., "cmd": ...}`)
             or a plain text prompt/query string.
-        context: Optional metadata (risk overrides, domain hints, etc.).
+        context: Optional metadata (`available_tools`, `file_content`, `shadow_mode`, `journal_path`, `log_decisions`).
         policy: Optional PolicyConfig instance.
 
     Returns:
         Dictionary adhering to:
-        `{decision, label, prediction_set, reason_code, layer, model_version, rules_version, latency_ms}`
+        `{decision, label, prediction_set, reason_code, layer, model_version, rules_version, latency_ms, input_sha256, shadow_mode}`
     """
     t0 = time.perf_counter_ns()
     ctx = context or {}
@@ -562,16 +818,37 @@ def decide(
         diff_text = input_data.get("diff") or input_data.get("payload_diff")
         cmd_str = input_data.get("cmd") or input_data.get("command") or (target_path if tool_name in ("run_command", "execute_shell") else None)
         query_text = str(input_data.get("query") or input_data.get("task_prompt") or "")
+        original_source = input_data.get("file_content") or ctx.get("file_content")
     else:
         tool_name = str(ctx.get("tool") or "")
         target_path = ctx.get("path")
         diff_text = ctx.get("diff")
         cmd_str = ctx.get("cmd")
         query_text = str(input_data or "")
+        original_source = ctx.get("file_content")
+
+    shadow_mode = bool(ctx.get("shadow_mode", False))
+    available_tools = ctx.get("available_tools")
+    journal_path = Path(ctx["journal_path"]) if ctx.get("journal_path") else None
+    should_log = bool(ctx.get("log_decisions", journal_path is not None))
+
+    canonical_payload = json.dumps(
+        {"tool": tool_name, "path": target_path, "cmd": cmd_str, "diff": diff_text, "query": query_text},
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    input_sha256 = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()[:16]
+
+    clean_tool = str(tool_name or "").strip().lower()
+    inferred_risk = TOOL_RISK_CLASSES.get(
+        clean_tool,
+        "EXTERNAL_ACTION" if (cmd_str or clean_tool) else ("REVERSIBLE_WRITE" if diff_text is not None else "READ_ONLY"),
+    )
 
     def _finish(decision: str, label: str, pred_set: List[str], reason_code: str, layer: int) -> Dict[str, Any]:
         latency_ms = round((time.perf_counter_ns() - t0) / 1_000_000.0, 4)
-        return {
+        out: Dict[str, Any] = {
             "decision": decision,
             "label": label,
             "prediction_set": pred_set,
@@ -580,40 +857,71 @@ def decide(
             "model_version": DEFAULT_MODEL_VERSION,
             "rules_version": RULES_VERSION,
             "latency_ms": latency_ms,
+            "input_sha256": input_sha256,
+            "shadow_mode": shadow_mode,
         }
+        if shadow_mode:
+            out["shadow_decision"] = decision
+            out["shadow_reason_code"] = reason_code
+            out["decision"] = "escalate"
+            out["reason_code"] = "shadow_mode_observation"
 
-    # --- Layer 0: Policy & Permissions ---
-    l0 = evaluate_layer0_policy(tool_name, target_path, cfg)
-    if l0["decision"] == "deny":
-        return _finish("deny", "blocked_policy", ["deny"], l0["reason_code"], 0)
-    if l0["decision"] == "escalate":
-        return _finish("escalate", "requires_confirmation", ["escalate", "deny"], l0["reason_code"], 0)
+        if should_log:
+            record_decision_journal(out, journal_path=journal_path)
+        else:
+            _DECISION_RING_BUFFER.append(dict(out))
+        return out
 
-    # --- Layer 1: Structural AST & Shell Parsers ---
-    if cmd_str:
-        sh_res = analyze_shell_command(cmd_str)
-        if not sh_res["is_safe"]:
-            return _finish("deny", sh_res["findings"][0], ["deny"], "layer1_shell_parser_veto", 1)
+    try:
+        if ctx.get("_test_fail_layer1"):
+            raise RuntimeError("Simulated Layer 1 parser failure")
 
-    if diff_text is not None:
-        diff_res = analyze_code_diff(target_path, diff_text)
-        if not diff_res["syntax_valid"]:
-            return _finish("deny", "syntax_error", ["deny"], "layer1_ast_syntax_error", 1)
-        if not diff_res["security_clean"]:
-            return _finish("deny", diff_res["findings"][0], ["deny"], "layer1_ast_security_veto", 1)
-        if diff_res["line_count"] > cfg.max_diff_lines:
-            return _finish("escalate", "high_blast_radius", ["allow", "deny"], "layer1_diff_scale_exceeded", 1)
+        # --- Layer 0: Policy & Permissions ---
+        l0 = evaluate_layer0_policy(tool_name, target_path, cfg)
+        if l0["decision"] == "deny":
+            return _finish("deny", "blocked_policy", ["deny"], l0["reason_code"], 0)
+        if l0["decision"] == "escalate":
+            return _finish("escalate", "requires_confirmation", ["escalate", "deny"], l0["reason_code"], 0)
 
-    # If pure tool invocation without free-text ambiguity and passed Layer 0 & Layer 1:
-    if tool_name and not query_text:
-        return _finish("allow", tool_name, [tool_name], "layer1_structural_verified", 1)
+        # --- Layer 1: Structural AST & Allowlist-First Shell Parsers ---
+        if cmd_str:
+            sh_res = analyze_shell_command(cmd_str)
+            if not sh_res["is_safe"]:
+                return _finish("deny", sh_res["findings"][0], ["deny"], "layer1_shell_parser_veto", 1)
+            if not sh_res.get("allowlisted", False):
+                unrec = sh_res.get("unrecognized_commands", [])
+                return _finish(
+                    "escalate",
+                    unrec[0] if unrec else "unrecognized_shell_command",
+                    ["allow", "deny"],
+                    "layer1_unrecognized_shell_command_escalate",
+                    1,
+                )
+
+        if diff_text is not None:
+            diff_res = analyze_code_diff(target_path, diff_text, original_source=original_source)
+            if not diff_res["syntax_valid"]:
+                return _finish("deny", "syntax_error", ["deny"], "layer1_ast_syntax_error", 1)
+            if not diff_res["security_clean"]:
+                return _finish("deny", diff_res["findings"][0], ["deny"], "layer1_ast_security_veto", 1)
+            if diff_res["line_count"] > cfg.max_diff_lines:
+                return _finish("escalate", "high_blast_radius", ["allow", "deny"], "layer1_diff_scale_exceeded", 1)
+
+        # Pure allowlisted/verified tool invocation without free-text routing
+        if tool_name and not query_text:
+            return _finish("allow", tool_name, [tool_name], "layer1_structural_verified", 1)
+
+    except Exception as exc:
+        if inferred_risk in ("EXTERNAL_ACTION", "IRREVERSIBLE_DESTRUCTIVE") or cmd_str or diff_text is not None:
+            return _finish("deny", "layer1_error", ["deny"], f"layer1_fail_closed:{type(exc).__name__}", 1)
+        return _finish("escalate", "layer1_error", [], f"layer1_escalate_on_error:{type(exc).__name__}", 1)
 
     # --- Layer 2: Calibrated Soft Classifier & Conformal Prediction Set ---
     if query_text:
         try:
             from .tool_routing_moe import get_tool_routing_moe
             moe = get_tool_routing_moe()
-            moe_res = moe.route(query_text)
+            moe_res = moe.route(query_text, available_tools=available_tools)
             if not moe_res.conformal_passed:
                 return _finish(
                     "escalate",

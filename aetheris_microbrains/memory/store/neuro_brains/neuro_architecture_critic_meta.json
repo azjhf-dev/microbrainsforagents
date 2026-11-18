@@ -115,6 +115,8 @@
     "52": "microkernel_extensible"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -143,8 +145,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "eb509f673e4e0dd2a273e9947548785ebceb0891a9bd4ebd108f1f66bf3c0417",
   "hopfield_rules_count": 2,
   "induction_heads": [],
-  "updated_at": 1794930390.703923
+  "updated_at": 1794965900.0146995
 }

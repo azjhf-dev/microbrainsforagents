@@ -199,6 +199,22 @@
     "94": "active"
   },
   "conformal_quantile": 0.05570000410079956,
+  "per_class_quantiles": {
+    "execute_plan": 0.0557,
+    "perform_ceremony": 0.045246,
+    "synthesize_solution": 0.03949,
+    "authorize_action": 0.0557,
+    "restore_intent": 0.042118,
+    "quarantine_scope": 0.044443
+  },
+  "per_class_counts": {
+    "execute_plan": 2,
+    "perform_ceremony": 3,
+    "synthesize_solution": 4,
+    "authorize_action": 6,
+    "restore_intent": 3,
+    "quarantine_scope": 4
+  },
   "conformal_alpha": 0.05,
   "conformal_scores": [
     0.04027211666107178,
@@ -225,9 +241,11 @@
     0.041896164417266846
   ],
   "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "74b15c22cf710a67764d1e0828588957251fe3517b2becdd62255c5fb32cea80",
   "hopfield_rules_count": 58,
   "induction_heads": [],
-  "updated_at": 1794964362.2951834
+  "updated_at": 1794965900.261227
 }

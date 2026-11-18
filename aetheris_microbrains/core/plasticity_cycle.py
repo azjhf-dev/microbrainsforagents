@@ -101,8 +101,8 @@ class PlasticityCycleScheduler:
 
         for dom in target_domains:
             sample_tokens = ["weekly_retrain", "context_window_warning_80_pct", "failure_recoverable_by_retry"]
-            res = self.pipeline.apply_plasticity_feedback(dom, sample_tokens, learning_rate=0.005)
-            if res.status == "success":
+            res = self.pipeline.apply_plasticity_feedback(dom, sample_tokens, learning_rate=0.005, promote=False)
+            if res.status in ("success", "promoted"):
                 adapted.append(dom)
                 tokens_count += len(res.tokens_updated)
                 penalties.append(res.ewc_penalty)
@@ -111,6 +111,8 @@ class PlasticityCycleScheduler:
                     domain=dom,
                     tokens_updated=len(res.tokens_updated),
                     ewc_penalty=res.ewc_penalty,
+                    measured_coverage=res.empirical_coverage,
+                    promoted=res.promoted,
                 )
 
         mean_penalty = float(sum(penalties) / len(penalties)) if penalties else 0.0
@@ -127,18 +129,25 @@ class PlasticityCycleScheduler:
         self._record_log(report)
         return report
 
-    def _record_telemetry(self, domain: str, tokens_updated: int, ewc_penalty: float) -> None:
+    def _record_telemetry(
+        self,
+        domain: str,
+        tokens_updated: int,
+        ewc_penalty: float,
+        measured_coverage: float = 0.0,
+        promoted: bool = False,
+    ) -> None:
         """Append telemetry metric line to microbrain_telemetry.jsonl."""
         try:
             self.telemetry_path.parent.mkdir(parents=True, exist_ok=True)
             record = {
                 "ts": utc_now_iso(),
                 "domain": domain,
-                "action": "plasticity_feedback",
+                "action": "plasticity_candidate_staged" if not promoted else "plasticity_promoted",
                 "tokens_updated": tokens_updated,
                 "ewc_penalty": round(ewc_penalty, 6),
-                "calibration_basis": "held_out",
-                "calibration_coverage": 0.985,
+                "empirical_coverage": round(float(measured_coverage), 4),
+                "promoted": promoted,
                 "vocab_growth": tokens_updated,
                 "status": "success",
             }

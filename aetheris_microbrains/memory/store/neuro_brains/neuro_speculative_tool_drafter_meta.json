@@ -327,6 +327,22 @@
     "174": "env_ready"
   },
   "conformal_quantile": 0.07558810710906982,
+  "per_class_quantiles": {
+    "run_tests": 0.069484,
+    "git_commit": 0.070863,
+    "repo_read": 0.071758,
+    "repo_write": 0.075588,
+    "finish_turn": 0.068462,
+    "counterfactual_simulate": 0.075588
+  },
+  "per_class_counts": {
+    "run_tests": 3,
+    "git_commit": 4,
+    "repo_read": 5,
+    "repo_write": 6,
+    "finish_turn": 3,
+    "counterfactual_simulate": 1
+  },
   "conformal_alpha": 0.05,
   "conformal_scores": [
     0.06937336921691895,
@@ -353,9 +369,11 @@
     0.06728142499923706
   ],
   "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "940df0c1018ee4cb62a2c88b732c84b747c0bf0d31b834423d96d5728735b0db",
   "hopfield_rules_count": 64,
   "induction_heads": [],
-  "updated_at": 1794964362.254758
+  "updated_at": 1794965900.4791777
 }

@@ -125,6 +125,8 @@
     "57": "long_term_potentiation_stored"
   },
   "conformal_quantile": 0.05,
+  "per_class_quantiles": {},
+  "per_class_counts": {},
   "conformal_alpha": 0.1,
   "conformal_scores": [
     0.001,
@@ -153,8 +155,12 @@
     0.0192,
     0.02
   ],
+  "n_calibration_samples": 25,
+  "coverage_std_error": 0.0577,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
+  "weights_sha256": "a7897587a273a0d07fc35a622382231d43dacbf36362c953586acea238562c5f",
   "hopfield_rules_count": 1,
   "induction_heads": [],
-  "updated_at": 1794927691.656232
+  "updated_at": 1794965900.3261294
 }

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -415,17 +415,23 @@ class ConformalCalibrationReport:
     empirical_coverage: float
     passed_coverage_gate: bool
     conformal_guarantee_valid: bool = False
+    coverage_std_error: float = 0.0
+    upper_error_bound_rule_of_3: float = 0.0
+    per_class_quantiles: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "domain": self.domain,
             "q_hat": round(self.q_hat, 4),
+            "per_class_quantiles": dict(self.per_class_quantiles),
             "alpha": self.alpha,
             "basis": self.basis,
             "n_train": self.n_train_samples,
             "n_calibration": self.n_calibration_samples,
             "n_validation": self.n_validation_samples,
             "empirical_coverage": round(self.empirical_coverage, 3),
+            "coverage_std_error": round(self.coverage_std_error, 4),
+            "upper_error_bound_rule_of_3": round(self.upper_error_bound_rule_of_3, 4),
             "passed_gate": self.passed_coverage_gate,
             "conformal_guarantee_valid": self.conformal_guarantee_valid,
         }
@@ -504,6 +510,8 @@ def run_conformal_calibration_pipeline(
 
         empirical_cov = val_hits / total_val if total_val > 0 else 1.0
         guarantee_valid = len(cal_data) >= min_req
+        cov_std = math.sqrt(max(0.0, float(alpha) * (1.0 - float(alpha))) / float(max(1, len(cal_data) + 2)))
+        upper_r3 = (3.0 / float(total_val)) if total_val > 0 else 1.0
 
         rep = ConformalCalibrationReport(
             domain=domain,
@@ -516,6 +524,9 @@ def run_conformal_calibration_pipeline(
             empirical_coverage=empirical_cov,
             passed_coverage_gate=empirical_cov >= (1.0 - alpha - 0.05),
             conformal_guarantee_valid=guarantee_valid,
+            coverage_std_error=round(cov_std, 4),
+            upper_error_bound_rule_of_3=round(upper_r3, 4),
+            per_class_quantiles=dict(getattr(brain, "per_class_quantiles", {})),
         )
         reports.append(rep)
 
