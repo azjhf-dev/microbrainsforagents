@@ -116,9 +116,35 @@ print("Status:", outcome.status)
 print("Step Rollouts:", outcome.step_predictions)
 ```
 
-### 5. Running Tests & the FastAPI Microbrain Server
+### 5. Allowlist Shell Gate, Dynamic `available_tools`, MCP-Zero & Shadow Mode
+
+```python
+import aetheris_microbrains as mb
+
+# Allowlist-first shell parser
+print(mb.decide({"tool": "execute_shell", "cmd": "ls -la"})["decision"])                    # -> "allow"
+print(mb.decide({"tool": "execute_shell", "cmd": "custom_deploy_binary --prod"})["decision"]) # -> "escalate"
+
+# Dynamic tool surface restriction + MCP-Zero Top-K narrowing
+narrowed = mb.narrow_tool_surface("fix bug and write repository patch", top_k=4)
+print(narrowed["mode"], narrowed["candidate_tools"], narrowed["reduction_ratio"])
+
+# Shadow-mode journaling + enclosing file alias AST resolution
+obs = mb.decide(
+    {"tool": "edit_file", "path": "src/runner.py", "diff": "def f(c):\n    _o.system(c)\n"},
+    context={"file_content": "import os as _o\n", "shadow_mode": True},
+)
+print(obs["decision"], obs["shadow_decision"], obs["input_sha256"])
+
+# Staged continual learning (`_candidates/` -> verify -> `_rollback/`)
+pipeline = mb.ContinualLearningPipeline()
+staged = pipeline.apply_plasticity_feedback("code_edit_verifier", ["new_ast_pattern"], promote=False)
+print(staged.candidate_staged, staged.promoted)
+```
+
+### 6. Running Tests & the FastAPI Microbrain Server
 
 ```bash
-pytest aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
+pytest aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
 python -m aetheris_microbrains.core.microbrain_server
 ```

@@ -119,6 +119,64 @@ nearest = vsa.find_nearest_domains("tool_routing_v2", top_k=3)
 print("Nearest models in parameter space:", nearest)
 ```
 
+### 5. Allowlist-First Shell Gate, File-Context AST & Shadow Mode
+
+```python
+import aetheris_microbrains as mb
+
+# Allowlisted read-only shell commands pass; unrecognized commands escalate;
+# destructive chains (`rm -f -r ~`, `sh -c 'rm -rf /'`, `ls $(whoami)`) are denied.
+print(mb.decide({"tool": "execute_shell", "cmd": "ls -la"})["decision"])                    # -> "allow"
+print(mb.decide({"tool": "execute_shell", "cmd": "custom_deploy_binary --prod"})["decision"]) # -> "escalate"
+
+# Resolve aliases declared in enclosing `file_content` + log shadow-mode decisions
+verdict = mb.decide(
+    {"tool": "edit_file", "path": "src/runner.py", "diff": "def f(c):\n    _o.system(c)\n"},
+    context={
+        "file_content": "import os as _o\n",
+        "shadow_mode": True,
+        "journal_path": "memory/decision_journal.jsonl",
+    },
+)
+print(verdict["decision"], verdict["shadow_decision"]) # -> "escalate" "deny"
+```
+
+### 6. Dynamic Tool Registry (`available_tools`) & MCP-Zero Top-K Narrowing
+
+```python
+import aetheris_microbrains as mb
+
+router = mb.get_tool_routing_moe()
+
+# Constrain selection strictly to the active agent mode's tool surface (bilingual RU/EN)
+res = router.route(
+    "прочитай файл и напиши патч для репозитория",
+    available_tools=["edit_file", "memory_recall", "web_fetch"],
+)
+print("Selected within surface:", res.selected_tool) # -> "edit_file"
+
+# MCP-Zero hierarchical Top-K catalog narrowing (escalates full catalog on OOD)
+narrowed = mb.narrow_tool_surface("fix bug and write repository patch", top_k=4)
+print(narrowed["mode"], narrowed["candidate_tools"], narrowed["reduction_ratio"])
+```
+
+### 7. Mondrian Conformal Quantiles, SHA-256 Checksums & Staged Plasticity
+
+```python
+import aetheris_microbrains as mb
+
+# Load weights with automatic SHA-256 integrity verification (`verify_checksum=True`)
+brain = mb.AnalyticalMicroTransformer.load("neuro_code_edit_verifier")
+inf = brain.infer_conformal(["syntax_tree_valid", "ast_node_function_def"], alpha=0.05, mondrian=True)
+print("Mondrian Quantiles:", inf["per_class_quantiles"], "Std Err:", inf["coverage_std_error"])
+
+# Staged continual plasticity: writes to `_candidates/`, requires holdout gate, supports `_rollback/`
+pipeline = mb.ContinualLearningPipeline()
+staged = pipeline.apply_plasticity_feedback("code_edit_verifier", ["new_ast_pattern"], promote=False)
+# prom = pipeline.verify_and_promote_candidate("code_edit_verifier", holdout_data, min_coverage=0.95)
+# pipeline.rollback_domain("code_edit_verifier")
+```
+
 ---
 
 ## 🎯 Scope & Design Principles
@@ -134,10 +192,10 @@ print("Nearest models in parameter space:", nearest)
 
 ## 🧪 Testing & Benchmarks
 
-Run the verification suites (including the regression probes for AST parsing, `shlex` shell parsing, cross-process determinism, split-conformal sample bounds, and clean `sys.path`):
+Run the verification suites (including Layer 0/1/2 ablation, bilingual baseline comparisons, AST parsing, allowlist `shlex` shell parsing, cross-process determinism, split/Mondrian conformal sample bounds, SHA-256 checksum verification, staged candidate rollback, and clean `sys.path`):
 
 ```bash
-pytest aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
+pytest aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
 ```
 
 ### Split-Conformal & Mondrian Coverage Discipline (`conformal_collector.py`):

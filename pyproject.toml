@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aetheris-microbrains"
-version = "0.3.0"
-description = "4-layer structural pre-filter and analytical Hopfield-Transformer microbrain SDK with AST/shlex safety analysis, deterministic SHA-256 MoE routing, and split-conformal calibration for LLM agents"
+version = "0.4.0"
+description = "4-layer structural pre-filter and analytical Hopfield-Transformer microbrain SDK (v0.4.0): Python AST & allowlist-first shlex shell parsers, bilingual SHA-256 MoE + MCP-Zero tool surface narrowing, Mondrian split-conformal calibration, SHA-256 weight checksums, and staged EWC plasticity"
 readme = "README.md"
 authors = [
     { name = "Dmitry Tikov", email = "drtikov@gmail.com" }
