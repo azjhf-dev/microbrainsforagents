@@ -7,6 +7,7 @@ without touching base weights.
 """
 
 from __future__ import annotations
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -81,7 +82,8 @@ class EpigeneticLensManager:
         Delta_W1 = alpha * (u1 @ v1^T)
         Delta_W2 = alpha * (u2 @ v2^T)
         """
-        rng = np.random.default_rng(hash(name) % (2**32))
+        seed = int.from_bytes(hashlib.sha256(str(name).encode("utf-8")).digest()[:4], "little")
+        rng = np.random.default_rng(seed)
 
         # Construct Rank-1 Delta for W1
         u1 = rng.standard_normal(d_in).astype(np.float32)
@@ -154,7 +156,7 @@ class EpigeneticLensManager:
         """
         Combines multiple registered lenses into a hybrid lens via TIES or DARE.
         """
-        from evolution.wsp_merger import WeightSpaceMerger
+        from .wsp_merger import WeightSpaceMerger
 
         loaded = [self.load_lens(name) for name in lens_names]
         d_W1_list = [l["delta_W1"] for l in loaded]

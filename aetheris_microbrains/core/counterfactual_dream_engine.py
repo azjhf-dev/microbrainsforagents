@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
-from core.synaptic_metaplasticity_engine import SynapticMetaplasticityEngine
+from .synaptic_metaplasticity_engine import SynapticMetaplasticityEngine
 
 class CounterfactualDreamEngine:
     """Generates synthetic counterfactual scenarios to harden micro-brains during offline sleep."""
@@ -95,7 +95,7 @@ class CounterfactualDreamEngine:
         if not meta_files:
             return {"status": "skipped", "reason": "No micro-brains found on disk"}
 
-        from core.analytical_micro_transformer import AnalyticalMicroTransformer
+        from .analytical_micro_transformer import AnalyticalMicroTransformer
 
         for meta_path in meta_files[:max_scenarios]:
             brain_name = meta_path.stem.replace("_meta", "")

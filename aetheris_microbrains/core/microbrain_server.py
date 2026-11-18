@@ -42,11 +42,11 @@ def _load_microbrain_config() -> Dict[str, Any]:
 
 # Try to import microbrain components
 try:
-    from core.opencl_microbrain_accelerator import (
+    from .opencl_microbrain_accelerator import (
         OpenCLMicroBrainAccelerator,
         get_opencl_accelerator,
     )
-    from core.brain_nursery import AutonomousBrainNursery as BrainNursery
+    from .brain_nursery import AutonomousBrainNursery as BrainNursery
     MICROBRAIN_AVAILABLE = True
 except ImportError as e:
     log.warning(f"Microbrain components not available: {e}")

@@ -170,7 +170,7 @@ class MorphogeneticSynaptogenesisEngine:
 
         active_brains: Dict[str, Any] = {}
         try:
-            from core.brain_nursery import AutonomousBrainNursery
+            from .brain_nursery import AutonomousBrainNursery
             if AutonomousBrainNursery._instance is not None:
                 active_brains = AutonomousBrainNursery._instance.active_brains
         except Exception:

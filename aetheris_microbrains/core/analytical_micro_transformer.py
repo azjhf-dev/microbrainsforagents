@@ -89,8 +89,10 @@ class AnalyticalMicroTransformer:
 
         # 5. Proposal 5: Split-Conformal Prediction & Calibrated Abstention
         self.conformal_quantile: Optional[float] = None
-        self.conformal_alpha: float = 0.10
+        self.conformal_alpha: float = 0.05
         self.conformal_scores: List[float] = []
+        self.n_calibration_samples: int = 0
+        self.conformal_guarantee_valid: bool = False
         # How the current conformal_quantile was obtained — honest provenance
         # for the quantile, which otherwise looks calibrated no matter what.
         self.conformal_basis: str = "uncalibrated"
@@ -282,7 +284,7 @@ class AnalyticalMicroTransformer:
         + Modern Hopfield LogSumExp Dense Associative Memory on the GT 710 OpenCL GPU.
         Eliminates modulo `k_idx % d_mlp` rule collisions and binds multi-token context via phase locking.
         """
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
 
         seq_len = min(len(input_tokens), self.max_seq_len)
         if seq_len == 0:
@@ -361,7 +363,7 @@ class AnalyticalMicroTransformer:
         hk = np.stack(self.hopfield_keys, axis=0) if self.hopfield_keys else np.zeros((0, self.d_model), dtype=np.float32)
         hv = np.stack(self.hopfield_values, axis=0) if self.hopfield_values else np.zeros((0, self.d_model), dtype=np.float32)
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         kh_res = acc.kuramoto_hopfield_attention(
             x_in=x, phases=phases, omega=omega, coupling_J=coupling_J,
@@ -405,15 +407,22 @@ class AnalyticalMicroTransformer:
         n = len(scores)
         q_level = min(1.0, math.ceil((n + 1) * (1.0 - float(alpha))) / float(n))
         q_hat = float(np.quantile(scores, q_level))
+        min_required = max(1, math.ceil(1.0 / max(1e-6, float(alpha))) - 1)
+        guarantee_valid = (not in_sample) and (n >= min_required)
 
         self.conformal_quantile = q_hat
         self.conformal_alpha = float(alpha)
         self.conformal_scores = scores
+        self.n_calibration_samples = n
+        self.conformal_guarantee_valid = guarantee_valid
         self.conformal_basis = "in_sample_auto" if in_sample else "held_out"
 
         return {
             "status": "calibrated",
             "n_samples": n,
+            "n_calibration_samples": n,
+            "min_required_samples": min_required,
+            "conformal_guarantee_valid": guarantee_valid,
             "alpha": float(alpha),
             "target_coverage": 1.0 - float(alpha),
             "quantile_q_hat": round(q_hat, 4),
@@ -490,6 +499,11 @@ class AnalyticalMicroTransformer:
             reason = "ood"
             selected_token = "<abstain>"
 
+        effective_alpha = float(alpha) if alpha is not None else self.conformal_alpha
+        n_cal = getattr(self, "n_calibration_samples", len(self.conformal_scores))
+        min_req = max(1, math.ceil(1.0 / max(1e-6, effective_alpha)) - 1)
+        guarantee_valid = (not uncalibrated) and (self.conformal_basis == "held_out") and (n_cal >= min_req)
+
         return {
             "prediction_set": prediction_set,
             "set_size": set_size,
@@ -503,7 +517,9 @@ class AnalyticalMicroTransformer:
             "conformal_quantile": round(float(q_hat), 4),
             "calibrated": not uncalibrated,
             "calibration_basis": "uncalibrated_default" if uncalibrated else self.conformal_basis,
-            "alpha": self.conformal_alpha,
+            "n_calibration_samples": n_cal,
+            "conformal_guarantee_valid": guarantee_valid,
+            "alpha": effective_alpha,
             "model_name": self.name,
         }
 
@@ -544,6 +560,8 @@ class AnalyticalMicroTransformer:
             "conformal_quantile": self.conformal_quantile,
             "conformal_alpha": self.conformal_alpha,
             "conformal_scores": self.conformal_scores,
+            "n_calibration_samples": getattr(self, "n_calibration_samples", len(self.conformal_scores)),
+            "conformal_guarantee_valid": getattr(self, "conformal_guarantee_valid", False),
             "conformal_basis": self.conformal_basis,
             "hopfield_rules_count": len(self.hopfield_keys),
             "induction_heads": list(getattr(self, "induction_heads", [])),
@@ -620,9 +638,12 @@ class AnalyticalMicroTransformer:
             obj.vocab = meta["vocab"]
             obj.inv_vocab = {int(k): v for k, v in meta["inv_vocab"].items()}
             obj.conformal_quantile = meta.get("conformal_quantile")
-            obj.conformal_alpha = float(meta.get("conformal_alpha", 0.10))
+            obj.conformal_alpha = float(meta.get("conformal_alpha", 0.05))
             obj.conformal_scores = list(meta.get("conformal_scores", []))
+            obj.n_calibration_samples = int(meta.get("n_calibration_samples", len(obj.conformal_scores)))
             obj.conformal_basis = str(meta.get("conformal_basis", "uncalibrated"))
+            min_req = max(1, math.ceil(1.0 / max(1e-6, obj.conformal_alpha)) - 1)
+            obj.conformal_guarantee_valid = bool(meta.get("conformal_guarantee_valid", obj.conformal_basis == "held_out" and obj.n_calibration_samples >= min_req))
             obj.induction_heads = list(meta.get("induction_heads", []))
             return obj
         except Exception:

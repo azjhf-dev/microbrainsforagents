@@ -184,7 +184,7 @@ class TestCounterfactualSimulationPipeline:
 
     def test_risky_syntax_error_patch(self):
         sim = mb.get_counterfactual_pipeline()
-        diff = "def bad():\n   SyntaxError in code\n"
+        diff = "def bad(x:\n   return x\n"
         res = sim.simulate_edit_impact("src/broken.py", diff)
         assert res.allowed is False
         assert res.status in ["ABSTAIN_ESCALATE_LLM", "VETOED_CONSTITUTIONAL", "VETOED_HIGH_RISK_BLAST"]

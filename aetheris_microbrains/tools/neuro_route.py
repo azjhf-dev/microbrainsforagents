@@ -62,7 +62,7 @@ def main(
     **kwargs: Any
 ) -> Dict[str, Any]:
     if action == "route":
-        from core.brain_moe_orchestrator import MicroMoEOrchestrator
+        from ..core.brain_moe_orchestrator import MicroMoEOrchestrator
         route_tokens = tokens or ([query_text] if query_text else [])
         if not route_tokens:
             return {"success": False, "error": "route requires tokens or query_text"}
@@ -73,7 +73,7 @@ def main(
         # uncertain routes (high prediction error) are exactly the ones the
         # morphogenetic engine sprouts exploratory axons for.
         try:
-            from core.morphogenetic_synaptogenesis import MorphogeneticSynaptogenesis
+            from ..core.morphogenetic_synaptogenesis import MorphogeneticSynaptogenesis
             expert = result.get("chosen_expert")
             confidence = float(result.get("routing_confidence", 0.0))
             is_route_success = bool(result.get("success", True))
@@ -91,7 +91,7 @@ def main(
         return result
 
     elif action == "plan_chain":
-        from core.zero_shot_tool_chainer import ZeroShotToolChainer
+        from ..core.zero_shot_tool_chainer import ZeroShotToolChainer
         if not query_text:
             return {"success": False, "error": "plan_chain requires query_text"}
         result = ZeroShotToolChainer.get_instance().decompose_and_chain(query_text)
@@ -100,7 +100,7 @@ def main(
         return result
 
     elif action == "associative_recall":
-        from core.weight_space_memory_synthesis import WeightSpaceMemorySynthesizer
+        from ..core.weight_space_memory_synthesis import WeightSpaceMemorySynthesizer
         if not query_text:
             return {"success": False, "error": "associative_recall requires query_text"}
         result = WeightSpaceMemorySynthesizer.get_instance().query_associative_memory(query_text)
@@ -109,8 +109,8 @@ def main(
         return result
 
     elif action == "conformal_route":
-        from core.brain_moe_orchestrator import MicroMoEOrchestrator
-        from core.brain_nursery import AutonomousBrainNursery
+        from ..core.brain_moe_orchestrator import MicroMoEOrchestrator
+        from ..core.brain_nursery import AutonomousBrainNursery
         route_tokens = tokens or ([query_text] if query_text else [])
         if not route_tokens:
             return {"success": False, "error": "conformal_route requires tokens or query_text"}
@@ -128,7 +128,7 @@ def main(
         return res
 
     elif action == "resident_hdc_search":
-        from core.evolution_surrogate_prefilter import get_experience_memory
+        from ..core.evolution_surrogate_prefilter import get_experience_memory
         if not query_text:
             return {"success": False, "error": "resident_hdc_search requires query_text"}
         res = get_experience_memory().search(query_text, top_k=int(top_k))
@@ -138,8 +138,8 @@ def main(
 
     elif action == "ensemble_route":
         from collections import Counter
-        from core.brain_moe_orchestrator import MicroMoEOrchestrator
-        from core.brain_nursery import AutonomousBrainNursery
+        from ..core.brain_moe_orchestrator import MicroMoEOrchestrator
+        from ..core.brain_nursery import AutonomousBrainNursery
         route_tokens = tokens or ([query_text] if query_text else [])
         if not route_tokens:
             return {"success": False, "error": "ensemble_route requires tokens or query_text"}

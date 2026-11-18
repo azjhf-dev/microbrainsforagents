@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from core.brain_nursery import AutonomousBrainNursery, STORE_DIR
-from core.brain_merger import NeuroBrainMerger
+from .brain_nursery import AutonomousBrainNursery, STORE_DIR
+from .brain_merger import NeuroBrainMerger
 
 logger = logging.getLogger(__name__)
 STRATEGY_BANK_FILE = Path("memory/store/strategy_bank.jsonl")
@@ -73,14 +73,14 @@ class AutonomousSleepDreamingEngine:
 
         if records_to_distill:
             try:
-                from core.weight_space_memory_synthesis import WeightSpaceMemorySynthesizer
+                from .weight_space_memory_synthesis import WeightSpaceMemorySynthesizer
                 WeightSpaceMemorySynthesizer.get_instance().distill_journal_records(records_to_distill)
             except Exception as exc:
                 logger.debug("Weight-space distillation skipped: %s", exc)
 
         if successful_tools:
             try:
-                from core.hebbian_plasticity_consolidator import HebbianPlasticityConsolidator
+                from .hebbian_plasticity_consolidator import HebbianPlasticityConsolidator
                 HebbianPlasticityConsolidator.get_instance().consolidate_success(
                     successful_tools, outcome_quality=1.0
                 )
@@ -123,7 +123,7 @@ class AutonomousSleepDreamingEngine:
         fission_checked = 0
         fission_events = []
         try:
-            from core.brain_cellular_fission import BrainCellularFissionEngine
+            from .brain_cellular_fission import BrainCellularFissionEngine
             fission = BrainCellularFissionEngine.get_instance()
             for brain_name in list(self.nursery.active_brains.keys()):
                 domain = brain_name

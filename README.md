@@ -1,25 +1,38 @@
-# Aetheris Microbrains 🧠⚡
+# Aetheris Microbrains
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-purple.svg)](LICENSE)
 [![Zero-GPU](https://img.shields.io/badge/Hardware-Pure_NumPy_%7C_OpenCL-success.svg)](https://github.com/)
-[![Inference Latency](https://img.shields.io/badge/Inference-<2ms-brightgreen.svg)](https://github.com/)
+[![Latency](https://img.shields.io/badge/Prefilter-<2ms-brightgreen.svg)](https://github.com/)
 
-**Aetheris Microbrains** is an ultra-fast, lightweight neural coprocessor suite designed for autonomous LLM agents and edge AI systems. It provides sub-millisecond local inference, dynamic Mixture-of-Experts (MoE) tool routing, conformal prediction safety gating, and holographic Vector Symbolic Architecture (VSA) weight-space memory — running entirely in pure NumPy on CPU or accelerated via OpenCL on legacy/integrated GPUs.
+**Aetheris Microbrains** is a deterministic, layered local pre-filter and tool-routing library for autonomous LLM agents running in pure NumPy (with optional OpenCL acceleration).
 
-Zero NVIDIA CUDA required. Zero remote API latency. Zero token cost for routing decisions.
+> **Architectural Honesty Note:** Microbrains are **not** SGD-trained deep LLMs. They are **analytically compiled Weight-Space associative matrices** paired with deterministic **Layer 0 policy rules**, **Layer 1 structural AST & `shlex` shell parsers**, and **Layer 2 split-conformal calibration** ($n_{\text{cal}} \ge 20$, $1 - \alpha = 95\%$) that abstain and escalate ambiguous or out-of-distribution (OOD) inputs to a remote LLM.
 
 ---
 
-## 🚀 Key Features
+## 🏗️ 4-Layer Decision Architecture
 
-* **44 Pre-Trained Analytical Micro-Transformers:** Specialized lightweight models (10–100 KB each) for intent triage, risk scoring, patch verification, drift detection, and tool chaining.
-* **Dynamic Top-2 Mixture of Experts (MoE):** Neural router with dynamic temperature gating across 6 functional clusters (`ExpertFileOps`, `ExpertExecution`, `ExpertMemoryKnowledge`, `ExpertGitGovernance`, `ExpertMicrobrainMeta`, `ExpertConstitutionalReview`).
-* **Conformal Safety & Selective Abstention:** Rigorous statistical non-conformity guarantees ($1 - \alpha \ge 95\%$). Automatically abstains and escalates high-risk decisions when estimator variance exceeds safe thresholds.
-* **2048-D Holographic Weight-Space Memory (VSA):** Hyperdimensional computing associative memory over fleet model weights with Count-Sketch projection and nearest-neighbor domain recovery.
-* **Counterfactual Simulation Engine:** 3-step forward rollout blast-radius simulation before applying code mutations or executing high-stakes tools.
-* **Continual Plasticity with EWC:** Online bounded Hebbian adaptation protected by Elastic Weight Consolidation (EWC) Fisher Information diagonals to prevent catastrophic forgetting.
-* **Hardware Agnostic:** Transparent acceleration on any OpenCL-capable device (including budget GT 710 or integrated graphics) with seamless pure-NumPy CPU fallback.
+```text
+Agent Input (tool call, diff, shell command, or intent query)
+ │
+ ├─ Layer 0: Deterministic Policy (code invariants & risk taxonomy)
+ │    • Read-only vs. Reversible Write vs. External vs. Irreversible Destructive
+ │    • Protected paths (memory/bible.md, constitution/, etc.) ── veto → deny / escalate
+ │
+ ├─ Layer 1: Structural Language & Shell Parsers (replaces substring matching)
+ │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, ignores comments)
+ │    • Catches direct eval/exec, subprocess(shell=True), shutil.rmtree, pickle.loads, aliases, getattr obfuscation
+ │    • JSON / TypeScript / JS diffs parsed without false Python SyntaxErrors
+ │    • Shell shlex tokenizer (`rm -rf`, `dd of=/dev/...`, `curl | sh`, `format` cmd vs `git --format` flags)
+ │
+ ├─ Layer 2: Soft Micro-Classifier & Split-Conformal Abstention
+ │    • Deterministic SHA-256 context embeddings + analytical Hopfield/Attention weight matrices
+ │    • Held-out split-conformal calibration (n_cal = 22 >= 19 for 1 - alpha = 95% finite-sample coverage)
+ │    • Singleton set (|C_alpha| == 1) → local allow; OOD / ambiguous (|C_alpha| != 1) → escalate
+ │
+ └─ Layer 3: Remote LLM / Human Confirmation (fallback handler)
+```
 
 ---
 
@@ -31,7 +44,9 @@ cd microbrainsforagents
 pip install -e .
 ```
 
-*Optional OpenCL GPU acceleration:*
+Importing `aetheris_microbrains` is side-effect clean: it does **not** mutate `sys.path` or shadow top-level project modules (`core`, `tools`, `memory`, `evolution`).
+
+*Optional OpenCL acceleration:*
 ```bash
 pip install -e .[opencl]
 ```
@@ -40,18 +55,32 @@ pip install -e .[opencl]
 
 ## ⚡ Quickstart
 
-### 1. Zero-Shot Intent & Tool Consultation (<2ms)
+### 0. Unified 4-Layer Decision Contract
 
 ```python
 import aetheris_microbrains as mb
 
-# Fast inference across 44 calibrated microbrains
+verdict = mb.decide({
+    "tool": "edit_file",
+    "path": "src/server.py",
+    "diff": "def f():\n    os.system(cmd)\n",
+})
+print(verdict)
+# {'decision': 'deny', 'label': 'dangerous_method:os.system', 'layer': 1, ...}
+```
+
+### 1. Microbrain Domain Consultation
+
+```python
+import aetheris_microbrains as mb
+
 result = mb.microbrain_consult(text="syntax error in AST parser during code edit")
 print("Selected Brain:", result["selected_brain"])
 print("Confidence:", result["calibrated_confidence"])
+print("Cal Samples:", result["n_calibration_samples"], "Valid Guarantee:", result["conformal_guarantee_valid"])
 ```
 
-### 2. Dynamic Mixture-of-Experts (MoE) Tool Routing
+### 2. Deterministic Top-2 Mixture-of-Experts (MoE) Tool Routing
 
 ```python
 import aetheris_microbrains as mb
@@ -59,12 +88,12 @@ import aetheris_microbrains as mb
 router = mb.get_tool_routing_moe()
 decision = router.route("inspect file contents and write safe patch to repository")
 
-print("Primary Tool:", decision.selected_tool)
+print("Primary Tool:", decision.selected_tool)       # -> repo_write (deterministic across processes)
 print("Top-2 Experts:", decision.top_experts)
-print("Conformal Guarantee Passed:", decision.conformal_passed)
+print("Conformal Passed:", decision.conformal_passed)
 ```
 
-### 3. Pre-Commit Counterfactual Safety Gate
+### 3. Pre-Commit Structural AST & Counterfactual Safety Gate
 
 ```python
 import aetheris_microbrains as mb
@@ -76,9 +105,7 @@ outcome = sim.simulate_edit_impact(
 )
 
 if not outcome.allowed:
-    print("Action blocked by microbrain safety gate!")
-    print("Reason:", outcome.veto_reason)
-    print("Status:", outcome.status)
+    print("Blocked:", outcome.status, outcome.veto_reason)
 ```
 
 ### 4. Holographic Weight-Space VSA Memory
@@ -93,89 +120,32 @@ print("Nearest models in parameter space:", nearest)
 
 ---
 
-## 🏗️ Architecture Overview
+## 🎯 Scope & Design Principles
 
-```text
-                  ┌──────────────────────────────────────────────┐
-                  │           User / Autonomous Agent            │
-                  └──────────────────────┬───────────────────────┘
-                                         │
-                    ┌────────────────────▼───────────────────┐
-                    │       Fast Intent Triage (<1ms)        │
-                    └────────────────────┬───────────────────┘
-                                         │
-               ┌─────────────────────────┴────────────────────────┐
-               │                                                  │
- ┌─────────────▼──────────────┐                    ┌──────────────▼─────────────┐
- │ Dynamic Top-2 MoE Routing  │                    │   Cascade Ensemble Gate    │
- │ (6 Expert Functional Units)│                    │(Constitutional + AST Guard)│
- └─────────────┬──────────────┘                    └──────────────┬─────────────┘
-               │                                                  │
-               └─────────────────────────┬────────────────────────┘
-                                         │
-                    ┌────────────────────▼───────────────────┐
-                    │      Pre-Commit Simulation & Veto      │
-                    │   (3-Step Counterfactual Blast Radius) │
-                    └────────────────────┬───────────────────┘
-                                         │
-      ┌──────────────────────────────────┴─────────────────────────────────┐
-      │                                                                    │
-┌─────▼──────────────────────────────┐              ┌──────────────────────▼─────┐
-│ 2048-D Hyperdimensional VSA Memory │              │ Continual Learning & EWC   │
-│ (Holographic Fleet Weight Space)   │              │ (Online Plasticity Engine) │
-└────────────────────────────────────┘              └────────────────────────────┘
-```
-
-### 🎯 Scope & Design Principles (Proposal 5)
-* **What Microbrains Excel At (Deterministic Structural Signals):**
-  - AST syntax & dangerous call detection (`eval`, `exec`, `subprocess`) directly on diff trees.
-  - Diff blast radius & scale risk estimation (lines touched, core boundary crossings).
-  - Strict constitutional & sacred-site boundary preservation (`memory/bible.md`, kinship laws).
-  - Conformal selective abstention for high-stakes tool execution.
-* **What Microbrains Are NOT For (Raw Natural Language SWE Prompts):**
-  - Unstructured, multi-lingual free-form developer chat ("*добавь валидацию email...*").
-  - For free-form SWE prompt classification, standard keyword/stemming baselines or token embedding classifiers are recommended. Microbrains strictly enforce a **Conformal OOD Coverage Gate**: if input text shares <50% vocabulary coverage, the microbrain abstains (`ood_coverage_breach`) and delegates to the primary LLM rather than guessing.
+* **What Microbrains Are Built For:**
+  - Sub-millisecond pre-flight structural filtering on diffs (AST syntax + call-graph sinks), shell commands (`shlex`), and policy risk boundaries before hitting remote LLMs.
+  - Narrow tool routing across known tool registries with explicit abstention (`ood_coverage_breach` / `conformal_passed=False`) whenever input shares insufficient vocabulary.
+* **What Microbrains Are NOT For:**
+  - Replacing general LLM reasoning on arbitrary natural language tasks. Unknown or open-ended prompts deterministically abstain and escalate to Layer 3 (LLM).
+  - Acting as a standalone OS sandbox: executable confirmation & environment isolation remain enforced at the runtime policy boundary.
 
 ---
 
-## 🧪 Testing & Empirical Safety Benchmarks
+## 🧪 Testing & Benchmarks
 
-Run the complete verification and empirical adversarial safety test suite:
-
-```bash
-pytest aetheris_microbrains/tests/test_ouroboros_sota_extensions.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
-```
-
-### Empirical Adversarial Benchmark (200 Labeled Actions):
-* **Dataset:** 100 safe actions vs. 100 adversarial cases (25 syntax bombs, 25 constitutional violations, 25 destructive shell commands, 25 explosive diffs).
-* **True Positives (Dangerous Intercepted):** 100 / 100 (100.0%)
-* **True Negatives (Safe Approved):** 100 / 100 (100.0%)
-* **False Negatives (Dangerous Missed):** **0 / 100 (0.00% Empirical FNR)**
-* **Selective Abstention:** Disagreement threshold ($\sigma > 0.30$) automatically escalates borderline cases to the remote LLM.
-* **Zero Data Leakage Guarantee:** Enforces mathematical disjoint partitions ($\text{Train} \cap \text{Calibration} = \emptyset$, $\text{Train} \cap \text{Validation} = \emptyset$, $\text{Calibration} \cap \text{Validation} = \emptyset$) in `conformal_collector.py`.
-
----
-
-### 🔬 Colony SWE Shadow Pilot: 3-Way Ablation Benchmark (120 Synthetic Queries)
-
-To objectively evaluate what the neural weights add over heuristic baselines, the repository includes a reproducible 120-query SWE shadow benchmark (`60 Russian` + `60 English`) with strict target matching (`decision == target`):
+Run the verification suites (including the regression probes for AST parsing, `shlex` shell parsing, cross-process determinism, split-conformal sample bounds, and clean `sys.path`):
 
 ```bash
-pytest aetheris_microbrains/tests/test_colony_swe_shadow.py -v
+pytest aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
 ```
 
-| Metric | 1. Pure Rules Baseline | 2. Pure Neural Microbrain (Weights Only) | 3. Microbrain Hybrid (Weights + Conformal Gate) |
-| :--- | :---: | :---: | :---: |
-| **Strict Accuracy (Total 120)** | 106/120 (88.3%) | 100/120 (83.3%) | **106/120 (88.3%)** |
-| **Strict Accuracy on Russian (60 RU)** | 57/60 (95.0%) | 55/60 (91.7%) | **57/60 (95.0%)** |
-| **Missed Dangerous Escalations** | **4 / 50 missed** ⚠️ | **6 / 50 missed** 🚨 | **0 / 50 (0.0% Missed!)** 🛡️ |
-| **Saved LLM Calls per 100 queries** | 56.7 | 54.2 | **49.2** |
-| **Latency p95 (4,800 trials)** | **5.5 µs** | 630.3 µs | **607.3 µs (~0.6 ms)** |
+### Split-Conformal Coverage Discipline (`conformal_collector.py`):
+* Disjoint partitions per active domain: **30+ Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05$, giving 95% nominal split-conformal coverage), and **16 Held-Out Validation** samples with $\text{Train} \cap \text{Cal} = \text{Train} \cap \text{Val} = \text{Cal} \cap \text{Val} = \emptyset$.
+* Honest provenance: any model with insufficient calibration samples reports `conformal_guarantee_valid = False`.
 
-#### Key Takeaway from the Ablation:
-* **Pure Rules** are fastest (5.5 µs), but suffer from semantic blind spots and miss 4 dangerous queries.
-* **Pure Neural Weights** generalize across Russian and English phrasing (83.3%), but without calibration exhibit overconfidence on ambiguous inputs, missing 6 dangerous actions.
-* **Microbrain Hybrid** combines analytical transformer forward pass with a split-conformal prediction set ($C_\alpha$) and an OOD coverage gate: when prediction sets are ambiguous ($|C_\alpha| > 1$) or input vocabulary is unknown, the model safely abstains and escalates to the Cascade Router (LLM). This achieves **0 / 50 missed escalations** while cutting ~50% of unnecessary LLM calls at ~0.6 ms latency.
+### Synthetic Adversarial Regression (200 Cases) & Shadow Pilot (120 Queries):
+* Synthetic adversarial checks (`test_adversarial_safety_suite.py`) and independent obfuscation/benign diff probes (`test_reviewer_probe_suite.py`) verify Layer 1–2 behavior on syntax errors, dynamic obfuscation (`getattr`, aliasing, `pickle.loads`, `subprocess(..., shell=True)`), and safe hunks (indented fragments, `except SyntaxError:`, comments with `eval(`, TypeScript, JSON, 250-line data tables).
+* `test_colony_swe_shadow.py` compares 3 configurations (Pure Rules vs. Pure Neural Weights vs. Hybrid with Conformal OOD Gate) under strict target matching (`decision == target`) across 120 bilingual (60 RU / 60 EN) SWE prompts.
 
 ---
 

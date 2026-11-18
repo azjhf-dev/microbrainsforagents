@@ -196,7 +196,7 @@ class TopologicalPersistenceMerger:
         Automatically selects the optimal geodesic interpolation parameter t* that minimizes
         the L1 Wasserstein discrepancy to the parent Betti-0/Betti-1 persistence barcodes.
         """
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
 
         wa = np.asarray(weights_a, dtype=np.float32).flatten()
         wb = np.asarray(weights_b, dtype=np.float32).flatten()

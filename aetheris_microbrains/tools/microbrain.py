@@ -27,8 +27,9 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
+_PKG_BRAINS_DIR = Path(__file__).resolve().parents[1] / "memory" / "store" / "neuro_brains"
 _CWD_BRAINS_DIR = Path("memory/store/neuro_brains")
-BRAINS_DIR = _CWD_BRAINS_DIR if _CWD_BRAINS_DIR.exists() else Path(__file__).resolve().parents[1] / "memory" / "store" / "neuro_brains"
+BRAINS_DIR = _PKG_BRAINS_DIR if _PKG_BRAINS_DIR.exists() else _CWD_BRAINS_DIR
 NAME_PREFIX = "neuro_"
 
 # (name, meta-mtime) -> parsed meta dict.  Brains are retrained by the
@@ -96,7 +97,7 @@ def _load_brain(name: str):
     if hit and hit[0] == mt:
         return hit[1]
     try:
-        from core.analytical_micro_transformer import AnalyticalMicroTransformer
+        from ..core.analytical_micro_transformer import AnalyticalMicroTransformer
         brain = AnalyticalMicroTransformer.load(name, directory=BRAINS_DIR)
     except Exception as e:
         log.warning("microbrain load failed for %s: %s", name, e)
@@ -135,6 +136,8 @@ def _route(tokens: List[str]) -> Dict[str, Any]:
     if best_hits == 0 or overlap < 0.25:
         domains = [str(m.get("_name") or "?") for m in metas]
         return {"success": True, "abstained": True, "domain": None,
+                "selected_brain": None,
+                "calibrated_confidence": 0.0,
                 "reason": "OOD coverage breach: input shares insufficient vocabulary with trained domains",
                 "overlap": round(overlap, 3),
                 "available_domains": domains}
@@ -183,34 +186,32 @@ def microbrain_consult(text: str = "", tokens: Optional[List[str]] = None,
     except Exception:
         conf = {}
 
+    calibrated_conf = round(float(conf.get("confidence") or fwd.get("confidence") or 0.0), 4)
     result = {
         "success": True,
         "abstained": False,
         "domain": name[len(NAME_PREFIX):] if name.startswith(NAME_PREFIX) else name,
+        "selected_brain": name,
+        "calibrated_confidence": calibrated_conf,
         "overlap": route.get("overlap"),
         "predicted_token": fwd.get("predicted_token"),
         "confidence": fwd.get("confidence"),
         "conformal_abstained": bool(conf.get("abstained")),
         "conformal_reason": str(conf.get("reason") or ""),
         "conformal_basis": str(meta.get("conformal_basis") or "uncalibrated"),
+        "n_calibration_samples": int(conf.get("n_calibration_samples", len(meta.get("conformal_scores", [])))),
+        "conformal_guarantee_valid": bool(conf.get("conformal_guarantee_valid", meta.get("conformal_guarantee_valid", False))),
         "model": name,
     }
-    try:
-        from memory.journal import log_event
-        log_event(
-            "microbrain_consult",
-            "microbrain consult: domain=%s predicted=%r conf=%.3f "
-            "overlap=%.2f conformal_abstained=%s" % (
-                result["domain"], result.get("predicted_token"),
-                float(result.get("confidence") or 0.0),
-                float(route.get("overlap") or 0.0), result["conformal_abstained"]),
-            {"domain": result["domain"], "tokens": tokens[:12],
-             "predicted_token": result.get("predicted_token"),
-             "confidence": result.get("confidence"),
-             "conformal_abstained": result["conformal_abstained"]},
-        )
-    except Exception:
-        pass
+    log.debug(
+        "microbrain_consult domain=%s selected_brain=%s predicted=%r conf=%.3f overlap=%.2f conformal_abstained=%s",
+        result["domain"],
+        name,
+        result.get("predicted_token"),
+        calibrated_conf,
+        float(route.get("overlap") or 0.0),
+        result["conformal_abstained"],
+    )
     return result
 
 

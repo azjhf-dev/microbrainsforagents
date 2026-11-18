@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from core.opencl_microbrain_accelerator import (
+from .opencl_microbrain_accelerator import (
     OpenCLMicroBrainAccelerator,
     get_opencl_accelerator,
 )

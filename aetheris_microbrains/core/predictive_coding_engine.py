@@ -122,7 +122,7 @@ class HierarchicalPredictiveCodingEngine:
         Relaxes hierarchical latent states (32 <-> 24 <-> 16) for `relax_steps` iterations
         before performing contrastive positive/negative local Hebbian updates.
         """
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
 
         pos_arr = np.asarray(positive_inputs, dtype=np.float32)
         if pos_arr.ndim == 1:

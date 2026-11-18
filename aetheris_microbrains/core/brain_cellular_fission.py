@@ -15,8 +15,8 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from core.analytical_micro_transformer import AnalyticalMicroTransformer
-from core.brain_nursery import AutonomousBrainNursery
+from .analytical_micro_transformer import AnalyticalMicroTransformer
+from .brain_nursery import AutonomousBrainNursery
 
 logger = logging.getLogger(__name__)
 

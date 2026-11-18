@@ -90,7 +90,7 @@ class MicroBrainHypernetwork:
         else:
             w_start = self.W_ttt_fast
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         muon_res = acc.muon_fast_weight_step(
             w_fast=w_start,
@@ -136,7 +136,7 @@ class MicroBrainHypernetwork:
         """
         k_vec = self._embed_task_description(context_spec)
         v_vec = self._embed_task_description(outcome_spec)
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         self.W_ttt_fast, loss, backend = acc.ttt_linear_step(
             self.W_ttt_fast, k_vec, v_vec, lr=lr, force_gpu=force_gpu

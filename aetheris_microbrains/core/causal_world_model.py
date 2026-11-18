@@ -144,32 +144,11 @@ class StructuralCausalModel:
         return True
 
     def _eval_ast(self, target_path: str, code: Optional[str]) -> bool:
-        if not str(target_path).endswith(".py") or not code:
+        if not code:
             return True
-        code_str = str(code).strip()
-        # If it's a unified diff, extract the added code lines
-        if any(line.startswith("+") or line.startswith("-") for line in code_str.splitlines()):
-            added_lines = [
-                line[1:] for line in code_str.splitlines()
-                if line.startswith("+") and not line.startswith("+++")
-            ]
-            code_to_parse = "\n".join(added_lines)
-            if not code_to_parse.strip():
-                return True
-        else:
-            code_to_parse = code_str
-
-        try:
-            ast.parse(code_to_parse)
-            return True
-        except SyntaxError:
-            # If parsing as a module failed, check if it's an indented block
-            try:
-                import textwrap
-                ast.parse(textwrap.dedent(code_to_parse))
-                return True
-            except SyntaxError:
-                return False
+        from .layered_decision_engine import analyze_code_diff
+        res = analyze_code_diff(target_path, str(code))
+        return bool(res["syntax_valid"] and res["security_clean"])
 
     def _eval_ancestral(self, target_path: str) -> bool:
         clean = str(target_path).replace("\\", "/")
@@ -305,12 +284,12 @@ class StructuralCausalModel:
         # Consult Neural Microbrain (Causal World Model / Counterfactual Reasoner)
         neural_conf = 0.85
         try:
-            from ouroboros.tools.moe_router import consult_expert_microbrain
+            from .brain_moe_orchestrator import consult_microbrain
 
             token = "breaking_change" if risk_score >= 0.5 else "causal_stable"
-            res = consult_expert_microbrain("counterfactual_reasoner", [token])
-            if res.get("available") and res.get("confidence"):
-                neural_conf = float(res.get("confidence"))
+            res = consult_microbrain("counterfactual_reasoner", [token])
+            if isinstance(res, dict) and res.get("confidence"):
+                neural_conf = float(res["confidence"])
         except Exception:
             pass
 

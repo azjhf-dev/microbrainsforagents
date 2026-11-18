@@ -308,7 +308,7 @@ class ConcentricSpiralDAG:
     _VOC_SCENARIO_MUTATION_DEPTH = 10
 
     def _action_voc_scheduler(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.voc_meta_scheduler import ValueOfComputationMetaScheduler
+        from .voc_meta_scheduler import ValueOfComputationMetaScheduler
         voc = ValueOfComputationMetaScheduler.get_instance()
         dec = voc.evaluate_task_computation_value(
             "spiral_tick",
@@ -318,7 +318,7 @@ class ConcentricSpiralDAG:
         return {"voc_mode": dec.mode, "voc_score": dec.voc_score}
 
     def _action_cbf_barrier(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.cbf_spectral_barrier import CBFSpectralBarrierEngine
+        from .cbf_spectral_barrier import CBFSpectralBarrierEngine
         cbf = CBFSpectralBarrierEngine.get_instance()
         # cbf_active is an instantiation flag, not a measurement: True whenever
         # the engine singleton constructs, regardless of whether any barrier
@@ -330,7 +330,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_autotelic_scanner(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.autotelic_void_explorer import AutotelicVoidExplorer
+        from .autotelic_void_explorer import AutotelicVoidExplorer
         explorer = AutotelicVoidExplorer.get_instance()
         voids = explorer.scan_microbrain_population()
         return {"topological_voids_detected": len(voids)}
@@ -344,7 +344,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_neuro_hormonal(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.neuro_hormonal_homeostasis import NeuroHormonalHomeostasis
+        from .neuro_hormonal_homeostasis import NeuroHormonalHomeostasis
         nh = NeuroHormonalHomeostasis.get_instance()
         state = nh.tick_homeostasis()
         return {
@@ -354,7 +354,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_hydro_fluid(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.hydro_cortex_fluid import HydroCortexFluidField
+        from .hydro_cortex_fluid import HydroCortexFluidField
         fluid = HydroCortexFluidField.get_instance()
         # The node measures its OWN injection: the density below is dominated
         # by this fixed probe perturbation, not by organic concept flow.
@@ -380,7 +380,7 @@ class ConcentricSpiralDAG:
         spiral nodes (symmetrized), so the spectrum tracks the real
         orchestration topology.
         """
-        from core.spectral_graph_analyzer import SpectralLaplacianAnalyzer
+        from .spectral_graph_analyzer import SpectralLaplacianAnalyzer
         analyzer = SpectralLaplacianAnalyzer.get_instance()
         names = list(self.nodes.keys())
         index = {n: i for i, n in enumerate(names)}
@@ -400,7 +400,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_ramanujan_analogy(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.ramanujan_mma import RamanujanMMACoprocessor
+        from .ramanujan_mma import RamanujanMMACoprocessor
         mma = RamanujanMMACoprocessor.get_instance()
         conj = mma.formulate_conjecture("spectral_laplacian", "hydro_cortex_fluid")
         return {
@@ -409,17 +409,17 @@ class ConcentricSpiralDAG:
         }
 
     def _action_mone_memory(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.mone_fast_weight_memory import MoNeFastWeightMemory
+        from .mone_fast_weight_memory import MoNeFastWeightMemory
         mone = MoNeFastWeightMemory.get_instance()
         return mone.get_status()
 
     def _action_vsa_attention(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.vsa_algebraic_attention import VSAAlgebraicAttentionEngine
+        from .vsa_algebraic_attention import VSAAlgebraicAttentionEngine
         vsa = VSAAlgebraicAttentionEngine.get_instance()
         return vsa.get_status()
 
     def _action_comem_distillation(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.comem_collective_distiller import CoMemCollectiveDistiller
+        from .comem_collective_distiller import CoMemCollectiveDistiller
         comem = CoMemCollectiveDistiller.get_instance()
         report = comem.distill_collective_wisdom()
         return {
@@ -429,7 +429,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_wsp_surgery(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.wsp_neural_surgeon import WSPNeuralSurgeon
+        from .wsp_neural_surgeon import WSPNeuralSurgeon
         surgeon = WSPNeuralSurgeon.get_instance()
         audit = surgeon.audit_neuro_brains_store()
         return {
@@ -439,7 +439,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_auto_dreamer(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.auto_dreamer_consolidator import AutoDreamerConsolidator
+        from .auto_dreamer_consolidator import AutoDreamerConsolidator
         consolidator = AutoDreamerConsolidator.get_instance()
         report = consolidator.consolidate_offline_dream()
         return {
@@ -473,7 +473,7 @@ class ConcentricSpiralDAG:
         the idle-gated SleepWakeOrchestrator (triggered from the
         tool-check daemon), so a spiral tick neither performs nor claims
         a consolidation that did not happen."""
-        from core.sleep_wake_orchestrator import SleepWakeOrchestrator
+        from .sleep_wake_orchestrator import SleepWakeOrchestrator
         orch = SleepWakeOrchestrator.get_instance()
         cycles = int(getattr(orch, "total_sleep_cycles_count", 0) or 0)
         return {
@@ -486,7 +486,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_temporal_stream(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.linear_state_space_microbrain import LinearStateSpaceMicroBrain
+        from .linear_state_space_microbrain import LinearStateSpaceMicroBrain
         ssm = LinearStateSpaceMicroBrain.get_instance()
 
         # P: 2026-11-11 - the feed previously packaged the fabricated
@@ -514,7 +514,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_nca_healing(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.nca_weight_regenerator import NCAWeightRegenerator
+        from .nca_weight_regenerator import NCAWeightRegenerator
         regenerator = NCAWeightRegenerator.get_instance()
         # Bounded self-test on a synthetic ternary matrix: proves the NCA
         # repair dynamics are alive without touching stored brain weights.
@@ -533,7 +533,7 @@ class ConcentricSpiralDAG:
         }
 
     def _action_synaptogenesis(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        from core.morphogenetic_synaptogenesis import MorphogeneticSynaptogenesis
+        from .morphogenetic_synaptogenesis import MorphogeneticSynaptogenesis
         synap = MorphogeneticSynaptogenesis.get_instance()
         lifecycle = synap.step_synaptic_lifecycle()
         prune_report = synap.prune_and_consolidate()

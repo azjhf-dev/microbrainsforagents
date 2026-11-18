@@ -103,7 +103,7 @@ class OnlineHebbianAdaptor:
 
             try:
                 np.savez_compressed(npz_path, **arrays)
-                from core.brain_nursery import AutonomousBrainNursery
+                from .brain_nursery import AutonomousBrainNursery
                 if AutonomousBrainNursery._instance is not None:
                     active = AutonomousBrainNursery._instance.active_brains.get(stem)
                     if active is not None:

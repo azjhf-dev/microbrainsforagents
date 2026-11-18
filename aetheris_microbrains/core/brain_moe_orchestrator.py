@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from core.analytical_micro_transformer import AnalyticalMicroTransformer
-from core.brain_nursery import AutonomousBrainNursery, STORE_DIR
+from .analytical_micro_transformer import AnalyticalMicroTransformer
+from .brain_nursery import AutonomousBrainNursery, STORE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class MicroMoEOrchestrator:
         if brain_obj is not None and hasattr(brain_obj, "vocab"):
             tokens.extend(list(brain_obj.vocab.keys())[:32])
         else:
-            import core.brain_nursery as nursery_mod
+            from . import brain_nursery as nursery_mod
             meta_path = nursery_mod.STORE_DIR / f"{exp_name}_meta.json"
             if meta_path.exists():
                 try:
@@ -187,7 +187,7 @@ class MicroMoEOrchestrator:
         hypervector (`320 x uint32`) and dispatches hardware bitwise XOR + popcount
         Hamming similarity search on the GT 710 OpenCL GPU.
         """
-        from core.opencl_microbrain_accelerator import OpenCLMicroBrainAccelerator
+        from .opencl_microbrain_accelerator import OpenCLMicroBrainAccelerator
 
         self._sync_experts()
         if not self.expert_names:

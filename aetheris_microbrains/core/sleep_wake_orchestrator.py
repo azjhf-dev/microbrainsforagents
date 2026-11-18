@@ -12,9 +12,9 @@ import time
 from typing import Any, Dict, List, Optional
 import numpy as np
 
-from core.sleep_dreaming_engine import AutonomousSleepDreamingEngine
-from core.counterfactual_dream_engine import CounterfactualDreamEngine
-from core.astrocyte_homeostatic_field import AstrocyteHomeostaticField
+from .sleep_dreaming_engine import AutonomousSleepDreamingEngine
+from .counterfactual_dream_engine import CounterfactualDreamEngine
+from .astrocyte_homeostatic_field import AstrocyteHomeostaticField
 
 class SleepWakeOrchestrator:
     """Manages biphasic cognitive states (WAKE vs SLEEP) for Aetheris micro-brain swarms."""

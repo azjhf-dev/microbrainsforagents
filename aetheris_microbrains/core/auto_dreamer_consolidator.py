@@ -170,7 +170,7 @@ class AutoDreamerConsolidator:
         # 5.1 Dual-Stream Grounding: Compile synthesized rules into weight-space memory
         weight_implant_count = 0
         try:
-            from core.wsp_neural_surgeon import WSPNeuralSurgeon
+            from .wsp_neural_surgeon import WSPNeuralSurgeon
             surgeon = WSPNeuralSurgeon.get_instance()
             for note in new_notes:
                 implant_res = self.ground_rule_into_neural_weights(note, surgeon)
@@ -234,7 +234,7 @@ class AutoDreamerConsolidator:
         import numpy as np
 
         if surgeon is None:
-            from core.wsp_neural_surgeon import WSPNeuralSurgeon
+            from .wsp_neural_surgeon import WSPNeuralSurgeon
             surgeon = WSPNeuralSurgeon.get_instance()
 
         target_file = self.weight_memory_path

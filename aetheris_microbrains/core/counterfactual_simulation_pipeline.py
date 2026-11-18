@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .cascade_ensemble import get_cascade_ensemble_router
 from .critical_ensemble_abstention import get_critical_ensemble
+from .layered_decision_engine import analyze_code_diff
 
 log = logging.getLogger(__name__)
 
@@ -91,15 +92,19 @@ class CounterfactualSimulationPipeline:
         step_predictions = []
         failure_modes = []
 
-        # Step 1: Pre-condition simulation
-        step_1_ok = not ("SyntaxError" in diff_text or "eval(" in diff_text)
-        step_predictions.append(f"Step 1 (AST Parse): {'PASS' if step_1_ok else 'FAIL'}")
+        # Step 1: Layer 1 Structural AST & Security Analysis
+        diff_analysis = analyze_code_diff(file_path, diff_text)
+        step_1_ok = bool(diff_analysis["syntax_valid"] and diff_analysis["security_clean"])
+        step_predictions.append(f"Step 1 (Structural AST Parse [{diff_analysis['language']}]): {'PASS' if step_1_ok else 'FAIL'}")
         if not step_1_ok:
-            failure_modes.append("Step 1: Malformed syntax in proposed diff")
+            if not diff_analysis["syntax_valid"]:
+                failure_modes.append("Step 1: Malformed syntax in proposed diff")
+            else:
+                failure_modes.append(f"Step 1: Security risk detected in AST ({', '.join(diff_analysis['findings'])})")
 
-        # Step 2: Import & Interface propagation
+        # Step 2: Import & Interface propagation blast radius
         line_count = len(diff_text.splitlines())
-        blast_score = min(1.0, line_count / 200.0)
+        blast_score = min(1.0, line_count / 600.0)
         step_2_ok = blast_score < 0.80
         step_predictions.append(f"Step 2 (Interface Cascade): {'PASS' if step_2_ok else 'WARN_HIGH_BLAST'}")
         if not step_2_ok:

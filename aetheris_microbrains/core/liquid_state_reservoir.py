@@ -176,7 +176,7 @@ class LiquidStateReservoir:
         g_drive = np.dot(self.W_res, self.state) + np.dot(self.W_in, u)
         f_drive = np.dot(self.W_gate, u) + self.state
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         self.state, backend = acc.cfc_step(self.state, f_drive, g_drive, self.tau_inv, dt, force_gpu=force_gpu)
         self.step_counter += 1

@@ -934,7 +934,7 @@ class OpenCLMicroBrainAccelerator:
                 data.setdefault("receipts", {}).setdefault(self.device_name, {}).update(receipts)
             tmp_path = self.CROSSOVER_STORE_PATH.parent / (self.CROSSOVER_STORE_PATH.name + ".tmp")
             tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            from core.atomic import atomic_replace
+            from .atomic import atomic_replace
 
             atomic_replace(tmp_path, self.CROSSOVER_STORE_PATH)
         except Exception as exc:

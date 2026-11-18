@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.atomic import atomic_read, atomic_write
+from .atomic import atomic_read, atomic_write
 
 DEFAULT_PERSONA_MEMORY_PATH = "memory/store/persona_memory.json"
 
@@ -288,7 +288,7 @@ class ActiveInferenceCluster:
         Computes Pragmatic Risk, Epistemic Information Gain (particle dispersion), and CVaR_0.10 tail risk.
         """
         import numpy as np
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
 
         drives = dict(initial_state.get("drives") or {}) if isinstance(initial_state, dict) else {}
         homeostasis = _clamp01(initial_state.get("homeostasis", 0.7) if isinstance(initial_state, dict) else 0.7)

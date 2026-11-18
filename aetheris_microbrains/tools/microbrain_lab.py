@@ -203,7 +203,7 @@ def main(
     t0 = time.perf_counter()
 
     if action == "dendritic_forward":
-        from core.dendritic_tree_microbrain import DendriticTreeMicroBrain
+        from ..core.dendritic_tree_microbrain import DendriticTreeMicroBrain
         if input_vector is None:
             return {"success": False, "error": "dendritic_forward requires input_vector"}
         res = DendriticTreeMicroBrain.get_instance().forward(input_vector)
@@ -213,7 +213,7 @@ def main(
         return res
 
     elif action == "dendritic_adapt":
-        from core.dendritic_tree_microbrain import DendriticTreeMicroBrain
+        from ..core.dendritic_tree_microbrain import DendriticTreeMicroBrain
         if input_vector is None or target_vector is None:
             return {"success": False, "error": "dendritic_adapt requires input_vector and target_vector"}
         res = DendriticTreeMicroBrain.get_instance().adapt_dendritic_plateau(
@@ -225,7 +225,7 @@ def main(
         return res
 
     elif action in ("ssm_step", "ssm_sequence", "ssm_parallel_scan", "ssm_mamba3_step", "ssm_mamba3_sequence", "ssm_fit_readout"):
-        from core.linear_state_space_microbrain import LinearStateSpaceMicroBrain
+        from ..core.linear_state_space_microbrain import LinearStateSpaceMicroBrain
         ssm = LinearStateSpaceMicroBrain.get_instance()
         if reset_state:
             ssm.reset()
@@ -263,7 +263,7 @@ def main(
         return res
 
     elif action == "kan_adapt_grid":
-        from core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
+        from ..core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
         xs = x_samples if x_samples is not None else sequence
         if xs is None:
             return {"success": False, "error": "kan_adapt_grid requires x_samples or sequence"}
@@ -274,7 +274,7 @@ def main(
         return res
 
     elif action == "kan_forward":
-        from core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
+        from ..core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
         if input_vector is None:
             return {"success": False, "error": "kan_forward requires input_vector"}
         y = KolmogorovArnoldMicroBrain.get_instance().forward(input_vector)
@@ -286,7 +286,7 @@ def main(
         }
 
     elif action == "kan_fit_symbolic":
-        from core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
+        from ..core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
         xs = x_samples if x_samples is not None else sequence
         ys = y_targets
         if xs is None or ys is None:
@@ -303,7 +303,7 @@ def main(
         }
 
     elif action == "kan_extract_formula":
-        from core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
+        from ..core.kolmogorov_arnold_microbrain import KolmogorovArnoldMicroBrain
         res = KolmogorovArnoldMicroBrain.get_instance().extract_symbolic_formula()
         res["success"] = True
         res["action"] = action
@@ -311,7 +311,7 @@ def main(
         return res
 
     elif action == "hypernet_synthesize":
-        from core.microbrain_hypernetwork import MicroBrainHypernetwork
+        from ..core.microbrain_hypernetwork import MicroBrainHypernetwork
         res = MicroBrainHypernetwork.get_instance().synthesize_weights(
             task_description, out_dim=int(out_dim), in_dim=int(in_dim),
         )
@@ -321,7 +321,7 @@ def main(
         return res
 
     elif action == "hypernet_titans_muon":
-        from core.microbrain_hypernetwork import MicroBrainHypernetwork
+        from ..core.microbrain_hypernetwork import MicroBrainHypernetwork
         xs = x_samples if x_samples is not None else sequence
         ys = y_targets
         if xs is None or ys is None:
@@ -334,7 +334,7 @@ def main(
 
     elif action == "bitnet_hadamard":
         import numpy as np
-        from core.bitnet_ternary_engine import BitLinearLayer, BitNetQuantizer
+        from ..core.bitnet_ternary_engine import BitLinearLayer, BitNetQuantizer
         vec = input_vector if input_vector is not None else sequence
         if vec is None:
             return {"success": False, "error": "bitnet_hadamard requires input_vector or sequence"}
@@ -354,7 +354,7 @@ def main(
         }
 
     elif action == "mod_train_gate":
-        from core.mixture_of_depths_router import MixtureOfDepthsRouter
+        from ..core.mixture_of_depths_router import MixtureOfDepthsRouter
         xs = x_samples if x_samples is not None else sequence
         ys = y_targets
         if xs is None or ys is None:
@@ -366,7 +366,7 @@ def main(
         return res
 
     elif action == "liquid_cfc_step":
-        from core.liquid_state_reservoir import LiquidStateReservoir
+        from ..core.liquid_state_reservoir import LiquidStateReservoir
         resv = LiquidStateReservoir.get_instance()
         if reset_state:
             resv.reset_state()
@@ -386,7 +386,7 @@ def main(
         return res
 
     elif action == "pc_incremental_step":
-        from core.predictive_coding_engine import HierarchicalPredictiveCodingEngine
+        from ..core.predictive_coding_engine import HierarchicalPredictiveCodingEngine
         if input_vector is None:
             return {"success": False, "error": "pc_incremental_step requires input_vector"}
         res = HierarchicalPredictiveCodingEngine.get_instance().step_incremental_pc(
@@ -398,7 +398,7 @@ def main(
         return res
 
     elif action == "pc_generate_top_down":
-        from core.predictive_coding_engine import HierarchicalPredictiveCodingEngine
+        from ..core.predictive_coding_engine import HierarchicalPredictiveCodingEngine
         top_lat = kwargs.get("top_latent") or input_vector
         if top_lat is None:
             return {"success": False, "error": "pc_generate_top_down requires top_latent or input_vector"}
@@ -409,7 +409,7 @@ def main(
         return res
 
     elif action == "topo_geodesic_merge":
-        from core.topological_persistence_merger import TopologicalPersistenceMerger
+        from ..core.topological_persistence_merger import TopologicalPersistenceMerger
         wa = kwargs.get("weights_a") or input_vector
         wb = kwargs.get("weights_b") or target_vector
         if wa is None or wb is None:
@@ -421,7 +421,7 @@ def main(
         return res
 
     elif action == "vsa_resonator_factorize":
-        from core.hyperdimensional_vsa_engine import HyperdimensionalVSAEngine
+        from ..core.hyperdimensional_vsa_engine import HyperdimensionalVSAEngine
         comp = kwargs.get("composite_vec") or input_vector
         tools = kwargs.get("candidate_tools") or []
         roles = kwargs.get("candidate_roles") or []
@@ -436,7 +436,7 @@ def main(
         return res
 
     elif action == "mone_delta_step":
-        from core.mone_fast_weight_memory import MoNeFastWeightMemory
+        from ..core.mone_fast_weight_memory import MoNeFastWeightMemory
         k_vec = kwargs.get("key_vector") or input_vector
         v_vec = kwargs.get("value_vector") or target_vector
         if k_vec is None or v_vec is None:
@@ -458,7 +458,7 @@ def main(
 
     elif action == "vsa_attention_query":
         import numpy as np
-        from core.vsa_algebraic_attention import VSAAlgebraicAttentionEngine
+        from ..core.vsa_algebraic_attention import VSAAlgebraicAttentionEngine
         k_vec = kwargs.get("key_vector") or input_vector
         if k_vec is None:
             return {"success": False, "error": "vsa_attention_query requires key_vector or input_vector"}
@@ -476,7 +476,7 @@ def main(
 
     elif action == "wsp_memit_implant":
         import numpy as np
-        from core.wsp_neural_surgeon import WSPNeuralSurgeon
+        from ..core.wsp_neural_surgeon import WSPNeuralSurgeon
         k_mat = kwargs.get("key_matrix") or x_samples
         v_mat = kwargs.get("value_matrix") or y_targets
         if k_mat is None or v_mat is None:

@@ -26,7 +26,7 @@ def get_best_execution_provider(batch_size: int = 1) -> str:
 def recommended_microbrain_dispatch(batch_size: int = 1) -> str:
     """Arbitrate between CPU SIMD (fast single reflex) and OpenCL GPU (parallel colony)."""
     try:
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         if acc.gpu_available and int(batch_size) >= acc.GPU_BATCH_THRESHOLD:
             return "OpenCL_GPU"
@@ -76,7 +76,7 @@ def get_hardware_report() -> Dict[str, Any]:
 
     # Check OpenCL GPU co-processor (supports legacy Kepler/Maxwell CUDA cards like GT 710)
     try:
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         if acc.gpu_available:
             report["gpu_detected"] = True

@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from core.analytical_micro_transformer import AnalyticalMicroTransformer
-from core.brain_nursery import AutonomousBrainNursery, STORE_DIR
-from core.topological_persistence_merger import TopologicalPersistenceMerger
+from .analytical_micro_transformer import AnalyticalMicroTransformer
+from .brain_nursery import AutonomousBrainNursery, STORE_DIR
+from .topological_persistence_merger import TopologicalPersistenceMerger
 
 logger = logging.getLogger(__name__)
 

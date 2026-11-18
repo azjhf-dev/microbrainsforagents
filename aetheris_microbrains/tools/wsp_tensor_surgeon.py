@@ -64,7 +64,7 @@ def run(
 ) -> Dict[str, Any]:
     """Execute Astra-style weight-space programming operation."""
     try:
-        from evolution.wsp_engine import WSPEngine
+        from ..evolution.wsp_engine import WSPEngine
         engine = WSPEngine()
     except Exception as e:
         return {

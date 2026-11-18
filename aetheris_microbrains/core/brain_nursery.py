@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
-from core.analytical_micro_transformer import AnalyticalMicroTransformer, STORE_DIR
+from .analytical_micro_transformer import AnalyticalMicroTransformer, STORE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ class AutonomousBrainNursery:
         brain = self._get_or_load_or_grow(domain_name)
         brain_name = brain.name
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
 
         w_base = getattr(brain, "W_mlp", None)
@@ -228,7 +228,7 @@ class AutonomousBrainNursery:
             w_base = np.eye(brain.d_model, dtype=np.float32)
             identity_fallback = True
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         step_res = acc.eggroll_es_step(
             w_base=w_base,
@@ -276,7 +276,7 @@ class AutonomousBrainNursery:
             w_base = np.eye(brain.d_model, dtype=np.float32)
             identity_fallback = True
 
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
         acc = get_opencl_accelerator()
         es_res = acc.eggroll_es_step(
             w_base=w_base,

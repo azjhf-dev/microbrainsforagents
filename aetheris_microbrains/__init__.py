@@ -1,24 +1,24 @@
 """
 Aetheris Microbrains Standalone SDK
 ===================================
-Self-contained, portable suite of Aetheris CPU/GPU microbrain architectures,
-OpenCL VRAM accelerator, analytical micro-transformers, brain nursery & lifecycle
-tools, Weight-Space Programming (WSP) engine, Vector Symbolic Architecture (VSA),
-dynamic Mixture of Experts (MoE), cascade ensembles, and pre-trained neuro-brains.
+Self-contained, portable suite of lightweight pure-NumPy analytical microbrains,
+layered structural AST/shell safety parsers, split-conformal abstention gates,
+OpenCL acceleration, Weight-Space Programming (WSP) engine, Vector Symbolic
+Architecture (VSA), deterministic Mixture of Experts (MoE), and cascade gates.
 
-External agents can import this package directly after placing `aetheris_microbrains`
-or its parent directory on `PYTHONPATH` / `sys.path`.
+Clean Python package: does NOT mutate `sys.path` or shadow host modules.
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-_PKG_ROOT = str(Path(__file__).resolve().parent)
-if _PKG_ROOT not in sys.path:
-    sys.path.insert(0, _PKG_ROOT)
-
+from .core.layered_decision_engine import (
+    PolicyConfig,
+    analyze_code_diff,
+    analyze_shell_command,
+    decide,
+    evaluate_layer0_policy,
+    is_protected_path,
+)
 from .core.opencl_microbrain_accelerator import (
     OpenCLMicroBrainAccelerator,
     get_opencl_accelerator,
@@ -136,6 +136,12 @@ from .tools.conformal_collector import (
 )
 
 __all__ = [
+    "decide",
+    "PolicyConfig",
+    "analyze_code_diff",
+    "analyze_shell_command",
+    "evaluate_layer0_policy",
+    "is_protected_path",
     "OpenCLMicroBrainAccelerator",
     "get_opencl_accelerator",
     "DendriticTreeMicroBrain",

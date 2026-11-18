@@ -115,7 +115,7 @@ class MixtureOfDepthsRouter:
         Packs batches of 32 binary feature vectors into single uint32 words so each GPU
         instruction evaluates 32 parallel samples across the 16 Boolean logic gates.
         """
-        from core.opencl_microbrain_accelerator import get_opencl_accelerator
+        from .opencl_microbrain_accelerator import get_opencl_accelerator
 
         x_mat = np.asarray(batch_inputs, dtype=np.float32)
         if x_mat.ndim == 1:

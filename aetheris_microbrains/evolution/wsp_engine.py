@@ -18,9 +18,9 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 
-from evolution.wsp_substrate import CPUMicroRouter, ROMEAssociativeMemory
-from evolution.wsp_sae import ConceptSparseAutoencoder
-from evolution.wsp_lenses import EpigeneticLensManager
+from .wsp_substrate import CPUMicroRouter, ROMEAssociativeMemory
+from .wsp_sae import ConceptSparseAutoencoder
+from .wsp_lenses import EpigeneticLensManager
 
 logger = logging.getLogger(__name__)
 

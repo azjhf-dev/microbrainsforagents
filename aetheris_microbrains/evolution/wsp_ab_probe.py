@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 
-from evolution.wsp_substrate import CPUMicroRouter
+from .wsp_substrate import CPUMicroRouter
 
 
 class InMemoryABProbe:

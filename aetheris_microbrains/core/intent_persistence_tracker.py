@@ -150,16 +150,10 @@ class IntentPersistenceTracker:
         # Consult Neural Intent Persistence Tracker
         try:
             token = "target_forgotten" if is_drifting else "root_goal_aligned"
-            try:
-                from core.brain_moe_orchestrator import consult_microbrain
-                res = consult_microbrain("intent_persistence_tracker", [token])
-                if res:
-                    neural_sig = res.get("prediction")
-            except ImportError:
-                from ouroboros.tools.moe_router import consult_expert_microbrain
-                res = consult_expert_microbrain("intent_persistence_tracker", [token])
-                if res.get("available"):
-                    neural_sig = res.get("prediction")
+            from .brain_moe_orchestrator import consult_microbrain
+            res = consult_microbrain("intent_persistence_tracker", [token])
+            if isinstance(res, dict):
+                neural_sig = res.get("prediction")
         except Exception as exc:
             log.debug("Intent neural consultation skipped: %s", exc)
 

@@ -18,7 +18,7 @@ import json
 import logging
 import time
 from typing import Any, Dict, List, Optional
-from core.brain_nursery import AutonomousBrainNursery
+from .brain_nursery import AutonomousBrainNursery
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class AgentSpeculativeDrafter:
         }
         for trigger, tool in patterns.items():
             self.draft_brain.compile_logic_association(trigger, tool, binding_gain=5.0)
-        import core.brain_nursery as nursery_mod
+        from . import brain_nursery as nursery_mod
         self.draft_brain.save(nursery_mod.STORE_DIR)
 
     def register_speculative_pattern(
@@ -69,7 +69,7 @@ class AgentSpeculativeDrafter:
         self.draft_brain.compile_logic_association(clean_trigger, tool_name, binding_gain=5.0)
         if default_params is not None:
             self.custom_param_templates[tool_name] = dict(default_params)
-        import core.brain_nursery as nursery_mod
+        from . import brain_nursery as nursery_mod
         self.draft_brain.save(nursery_mod.STORE_DIR)
         return {"status": "registered", "trigger": clean_trigger, "tool": tool_name}
 

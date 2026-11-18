@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .analytical_micro_transformer import AnalyticalMicroTransformer, STORE_DIR
+from .layered_decision_engine import (
+    analyze_code_diff,
+    analyze_shell_command,
+    is_protected_path,
+)
 
 log = logging.getLogger(__name__)
 
@@ -105,7 +110,7 @@ class CascadeEnsembleRouter:
         intent_conf = 0.95
         if fast_intent:
             prompt_tokens = [t.lower() for t in task_prompt.split() if len(t) > 2]
-            intent_conf = max(0.85, 1.0 - getattr(fast_intent, "conformal_quantile", 0.05))
+            intent_conf = max(0.90, 1.0 - getattr(fast_intent, "conformal_quantile", 0.05))
             if any(w in prompt_tokens for w in ["fix", "error", "bug"]):
                 intent_decision = "debug"
             elif any(w in prompt_tokens for w in ["write", "patch", "edit"]):
@@ -125,11 +130,16 @@ class CascadeEnsembleRouter:
         routing_conf = 0.96
         routing_match = True
         tool_tok = f"tool_{target_tool}"
+        standard_cli_tools = {
+            "ls", "echo", "pwd", "git", "clang-format", "read_file", "write_file",
+            "repo_read", "repo_write", "edit_file", "run_command", "execute_shell",
+        }
         if routing_brain and tool_tok in routing_brain.vocab:
-            routing_conf = max(0.90, 1.0 - getattr(routing_brain, "conformal_quantile", 0.02))
+            routing_conf = max(0.90, 1.0 - getattr(routing_brain, "conformal_quantile", 0.05))
+        elif target_tool.lower().split()[0] in standard_cli_tools:
+            routing_conf = 0.92
         elif routing_brain:
-            # Fallback for dynamic/unregistered tools
-            routing_conf = 0.88
+            routing_conf = 0.90
 
         cum_conf *= routing_conf
         tiers.append(CascadeTierResult(
@@ -140,20 +150,19 @@ class CascadeEnsembleRouter:
             passed=routing_match,
         ))
 
-        # --- Tier 3: Constitutional & Sacred Site Guard ---
+        # --- Tier 3: Constitutional & Protected Path Guard ---
         const_brain = self._get_brain("neuro_constitutional_guardian")
         const_passed = True
         const_conf = 0.98
         const_decision = "verdict_pass"
 
-        # Check path parameters for sacred site violations
         target_path_str = str(tool_args.get("path") or tool_args.get("file_path") or "")
-        is_sacred = "aboriginal" in target_path_str.lower() or "bible.md" in target_path_str.lower()
-        if is_sacred and target_tool in ["write_file", "edit_file", "repo_write"]:
+        is_sacred = is_protected_path(target_path_str)
+        if is_sacred and target_tool in ["write_file", "edit_file", "repo_write", "apply_patch", "delete_file"]:
             const_passed = False
             const_decision = "verdict_block"
             const_conf = 0.99
-            reasons.append(f"Constitutional block: '{target_path_str}' is an Ancestral Sacred Site guarded by Kinship law")
+            reasons.append(f"Constitutional block: '{target_path_str}' is a protected constitutional boundary / Sacred Site")
 
         cum_conf *= const_conf
         tiers.append(CascadeTierResult(
@@ -165,19 +174,33 @@ class CascadeEnsembleRouter:
             details={"is_sacred": is_sacred},
         ))
 
-        # --- Tier 4: Speculative Suki Failure Check ---
+        # --- Tier 4: Speculative Suki Failure Check (Layer 1 Shell & Diff Parsers) ---
         suki_brain = self._get_brain("neuro_tool_failure_classifier")
         suki_passed = True
         suki_conf = 0.95
         suki_class = "clean_success"
 
-        # Detect high-risk precondition failures
-        if target_tool in ["execute_shell", "run_command"]:
-            cmd = str(tool_args.get("cmd") or tool_args.get("command") or tool_args.get("CommandLine") or "")
-            if any(op in cmd for op in ["rm -rf /", "del /f /s /q c:\\", "format "]):
+        cmd = str(tool_args.get("cmd") or tool_args.get("command") or tool_args.get("CommandLine") or "")
+        if not cmd and target_tool and any(ch in target_tool for ch in (" ", "/", "|", ";")):
+            cmd = target_tool
+        if target_tool in ["execute_shell", "run_command"] or cmd:
+            shell_res = analyze_shell_command(cmd)
+            if not shell_res["is_safe"]:
                 suki_passed = False
                 suki_class = "suki_class_c_boundary"
-                reasons.append("Catastrophic boundary failure predicted for destructive command")
+                reasons.append(
+                    f"Structural shell parser blocked destructive command ({', '.join(shell_res['findings'])})"
+                )
+
+        diff_payload = tool_args.get("diff") or tool_args.get("payload_diff")
+        if suki_passed and diff_payload:
+            diff_res = analyze_code_diff(target_path_str, diff_payload)
+            if not diff_res["syntax_valid"] or not diff_res["security_clean"]:
+                suki_passed = False
+                suki_class = "suki_class_ast_violation"
+                reasons.append(
+                    f"Structural AST parser blocked unsafe patch ({', '.join(diff_res['findings'])})"
+                )
 
         cum_conf *= suki_conf
         tiers.append(CascadeTierResult(

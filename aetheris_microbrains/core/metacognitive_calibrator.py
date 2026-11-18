@@ -126,7 +126,7 @@ def calibrate_action_confidence(
     # Rather than hardcoding q_hat = 1 - alpha, query trained brain metadata or conformal collector
     q_hat = None
     try:
-        from core.analytical_micro_transformer import AnalyticalMicroTransformer
+        from .analytical_micro_transformer import AnalyticalMicroTransformer
         cal_model = AnalyticalMicroTransformer.load("neuro_metacognitive_calibrator")
         if cal_model and getattr(cal_model, "conformal_quantile", None) is not None:
             q_hat = float(cal_model.conformal_quantile)
@@ -172,16 +172,10 @@ def calibrate_action_confidence(
         token = "regex_editing_overconfidence" if clean_domain == "regex_replace" else (
             "git_lock_uncertainty" if clean_domain == "git_operations" else "verified_ast_high_conf"
         )
-        try:
-            from core.brain_moe_orchestrator import consult_microbrain
-            res = consult_microbrain("metacognitive_calibrator", [token])
-            if res:
-                neural_sig = res.get("prediction")
-        except ImportError:
-            from ouroboros.tools.moe_router import consult_expert_microbrain
-            res = consult_expert_microbrain("metacognitive_calibrator", [token])
-            if res.get("available"):
-                neural_sig = res.get("prediction")
+        from .brain_moe_orchestrator import consult_microbrain
+        res = consult_microbrain("metacognitive_calibrator", [token])
+        if res:
+            neural_sig = res.get("prediction")
     except Exception as exc:
         log.debug("Metacognitive microbrain consultation skipped: %s", exc)
 

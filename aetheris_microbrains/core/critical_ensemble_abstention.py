@@ -18,7 +18,6 @@ Provides high-assurance consensus gating for high-stakes actions:
 
 from __future__ import annotations
 
-import ast
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +26,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 
 from .analytical_micro_transformer import AnalyticalMicroTransformer, STORE_DIR
+from .layered_decision_engine import (
+    analyze_code_diff,
+    analyze_shell_command,
+    is_protected_path,
+)
 
 log = logging.getLogger(__name__)
 
@@ -179,8 +183,7 @@ class CriticalEnsemble:
         # Estimator 1: Constitutional Guardian
         # =========================================================================
         guardian = self._get_model("neuro_constitutional_guardian")
-        sacred_keywords = ["aboriginal", "bible.md", "kinship", "totem", "sacred", "constitution", "axiom", "integrity_manifest"]
-        is_sacred = any(s in path_str.lower() for s in sacred_keywords) if path_str else False
+        is_sacred = is_protected_path(path_str)
         g_tokens = ["sacred_site_aboriginal_core", "action_repo_write_checked"] if is_sacred else ["boundary_containment_active", "ancestral_law_honored"]
 
         if guardian is None:
@@ -219,49 +222,19 @@ class CriticalEnsemble:
         ))
 
         # =========================================================================
-        # Estimator 2: Code Edit Verifier (Real AST Parsing & Tokenization)
+        # Estimator 2: Code Edit Verifier (Layer 1 Language-Aware Structural AST)
         # =========================================================================
         verifier = self._get_model("neuro_code_edit_verifier")
-        ast_tokens = ["read_before_write"]
-        syntax_clean = True
-        security_clean = True
+        diff_analysis = analyze_code_diff(path_str, payload_diff)
+        syntax_clean = bool(diff_analysis["syntax_valid"])
+        security_clean = bool(diff_analysis["security_clean"])
 
-        if payload_diff:
-            code_lines = []
-            for line in payload_diff.splitlines():
-                if line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
-                    continue
-                elif line.startswith("+") or line.startswith(" "):
-                    code_lines.append(line[1:])
-                elif not line.startswith("-"):
-                    code_lines.append(line)
-
-            code_text = "\n".join(code_lines).strip()
-            if code_text:
-                try:
-                    parsed_tree = ast.parse(code_text)
-                    for node in ast.walk(parsed_tree):
-                        if isinstance(node, ast.FunctionDef):
-                            ast_tokens.append("ast_node_function_def")
-                        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                            ast_tokens.append("ast_node_import")
-                        elif isinstance(node, ast.Call):
-                            ast_tokens.append("ast_node_call")
-                            func_name = ""
-                            if isinstance(node.func, ast.Name):
-                                func_name = node.func.id
-                            elif isinstance(node.func, ast.Attribute):
-                                func_name = node.func.attr
-                            if func_name in ("eval", "exec", "__import__", "system", "popen"):
-                                security_clean = False
-                                ast_tokens.append("side_effect_subprocess_spawn")
-                    if security_clean:
-                        ast_tokens.append("syntax_tree_valid")
-                except SyntaxError:
-                    syntax_clean = False
-                    ast_tokens.append("syntax_tree_malformed")
+        if not syntax_clean:
+            ast_tokens = ["syntax_tree_malformed", "ast_node_try_except"]
+        elif not security_clean:
+            ast_tokens = ["ast_node_call", "side_effect_subprocess_spawn"]
         else:
-            ast_tokens.append("syntax_tree_valid")
+            ast_tokens = ["syntax_tree_valid", "ast_node_function_def"]
 
         if verifier is None:
             v_verdict = "ABSTAIN"
@@ -348,12 +321,14 @@ class CriticalEnsemble:
         ))
 
         # =========================================================================
-        # Estimator 4: Tool Failure Classifier
+        # Estimator 4: Tool Failure Classifier (Layer 1 Shell Structural Parser)
         # =========================================================================
         classifier = self._get_model("neuro_tool_failure_classifier")
-        is_destructive_shell = action_name in ["run_command", "execute_shell"] and path_str and any(
-            op in path_str for op in ["rm -rf", "del /f", "format ", "drop database"]
-        )
+        if action_name in ["run_command", "execute_shell"] and path_str:
+            shell_res = analyze_shell_command(path_str)
+            is_destructive_shell = not shell_res["is_safe"]
+        else:
+            is_destructive_shell = False
         tf_tokens = ["suki_class_boundary", "failure_fatal_circuit_breaker"] if is_destructive_shell else ["failure_severity_benign", "action_inspect_stack_trace"]
 
         if classifier is None:

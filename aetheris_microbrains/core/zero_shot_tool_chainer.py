@@ -11,8 +11,8 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
-from core.hyperdimensional_vsa_engine import HyperdimensionalVSAEngine
-from core.hierarchical_moe_cortex import HierarchicalMoECortex
+from .hyperdimensional_vsa_engine import HyperdimensionalVSAEngine
+from .hierarchical_moe_cortex import HierarchicalMoECortex
 
 class ZeroShotToolChainer:
     """Assembles and verifies multi-tool execution pipelines using holographic vector binding."""

@@ -99,7 +99,7 @@ class BitLinearLayer:
         out_float: Optional[np.ndarray] = None
         if force_gpu or batch_size >= 32:
             try:
-                from core.opencl_microbrain_accelerator import get_opencl_accelerator
+                from .opencl_microbrain_accelerator import get_opencl_accelerator
                 acc = get_opencl_accelerator()
                 if acc.should_use_gpu("bitnet_batch_gemm", batch_size, force_gpu=force_gpu):
                     out_float, self.last_backend = acc.bitnet_forward(

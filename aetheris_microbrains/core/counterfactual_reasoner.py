@@ -91,10 +91,7 @@ def simulate_counterfactual(
 
     # Delegate lookahead simulation to the grounded Structural Causal World Model
     try:
-        try:
-            from core.causal_world_model import get_causal_world_model
-        except ImportError:
-            from ouroboros.causal_world_model import get_causal_world_model
+        from .causal_world_model import get_causal_world_model
 
         cwm = get_causal_world_model(repo_dir)
         scm_res = cwm.evaluate(
@@ -152,19 +149,11 @@ def simulate_counterfactual(
     neural_pred = None
     confidence = 0.0
     try:
-        try:
-            from core.brain_moe_orchestrator import consult_microbrain
-            res = consult_microbrain("counterfactual_reasoner", ["breaking_change" if risk_score >= 0.5 else "simulate_commit"])
-            if res:
-                neural_pred = res.get("prediction")
-                confidence = float(res.get("confidence") or 0.0)
-        except ImportError:
-            from ouroboros.tools.moe_router import consult_expert_microbrain
-            token = "breaking_change" if risk_score >= 0.5 else ("irreversible_edit" if requires_sandbox else "simulate_commit")
-            neural_res = consult_expert_microbrain("counterfactual_reasoner", [token])
-            if neural_res.get("available"):
-                neural_pred = neural_res.get("prediction")
-                confidence = float(neural_res.get("confidence") or 0.0)
+        from .brain_moe_orchestrator import consult_microbrain
+        res = consult_microbrain("counterfactual_reasoner", ["breaking_change" if risk_score >= 0.5 else "simulate_commit"])
+        if isinstance(res, dict):
+            neural_pred = res.get("prediction")
+            confidence = float(res.get("confidence") or 0.0)
     except Exception as exc:
         log.debug("Counterfactual neural consultation skipped: %s", exc)
 

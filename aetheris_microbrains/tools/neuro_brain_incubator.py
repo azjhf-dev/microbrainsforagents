@@ -12,7 +12,7 @@ population can be actively curated instead of only grown.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from core.brain_nursery import AutonomousBrainNursery
+from ..core.brain_nursery import AutonomousBrainNursery
 
 schema = {
     "name": "neuro_brain_incubator",
@@ -237,7 +237,7 @@ def run(
         }
 
     elif action == "merge_slerp":
-        from core.brain_merger import NeuroBrainMerger
+        from ..core.brain_merger import NeuroBrainMerger
         if not brain_name_a or not brain_name_b or not fused_brain_name:
             return {"success": False, "error": "brain_name_a, brain_name_b and fused_brain_name are required"}
         fused = NeuroBrainMerger.get_instance().merge_two_brains_slerp(
@@ -249,7 +249,7 @@ def run(
         # Proposal 4: Register fused model weights in WeightSpaceVSA
         # Register fused model weights in WeightSpaceVSA
         try:
-            from core.weight_space_vsa import get_weight_space_vsa
+            from ..core.weight_space_vsa import get_weight_space_vsa
             vsa = get_weight_space_vsa()
             vsa.store_brain_weights(fused.name, fused.weights)
             vsa.save()
@@ -264,7 +264,7 @@ def run(
         }
 
     elif action == "merge_ties":
-        from core.brain_merger import NeuroBrainMerger
+        from ..core.brain_merger import NeuroBrainMerger
         if not brain_names or not fused_brain_name:
             return {"success": False, "error": "brain_names and fused_brain_name are required"}
         fused = NeuroBrainMerger.get_instance().merge_brains_ties(brain_names, fused_brain_name)
@@ -273,7 +273,7 @@ def run(
         # Proposal 4: Register fused model weights in WeightSpaceVSA
         # Register fused model weights in WeightSpaceVSA
         try:
-            from core.weight_space_vsa import get_weight_space_vsa
+            from ..core.weight_space_vsa import get_weight_space_vsa
             vsa = get_weight_space_vsa()
             vsa.store_brain_weights(fused.name, fused.weights)
             vsa.save()
@@ -288,13 +288,13 @@ def run(
         }
 
     elif action == "fission_check":
-        from core.brain_cellular_fission import BrainCellularFissionEngine
+        from ..core.brain_cellular_fission import BrainCellularFissionEngine
         result = BrainCellularFissionEngine.get_instance().evaluate_and_split_if_saturated(domain_name)
         result["success"] = result.get("status") in ("healthy", "fission_executed")
         result["action"] = "fission_check"
         # Nearest neighbor domain search in weight space
         try:
-            from core.weight_space_vsa import get_weight_space_vsa
+            from ..core.weight_space_vsa import get_weight_space_vsa
             vsa = get_weight_space_vsa()
             result["vsa_nearest_domains"] = vsa.find_nearest_domains(domain_name, top_k=3)
         except Exception:
@@ -302,7 +302,7 @@ def run(
         return result
 
     elif action == "plasticity_feedback":
-        from core.brain_plasticity_updater import BrainPlasticityUpdater
+        from ..core.brain_plasticity_updater import BrainPlasticityUpdater
         if not trigger_token or not predicted_token:
             return {"success": False, "error": "trigger_token and predicted_token are required"}
         result = BrainPlasticityUpdater.get_instance().process_execution_feedback(
@@ -314,7 +314,7 @@ def run(
         return result
 
     elif action == "hebbian_update":
-        from core.online_hebbian_adaptor import OnlineHebbianAdaptor
+        from ..core.online_hebbian_adaptor import OnlineHebbianAdaptor
         if not brain_name or input_activation is None or output_feedback is None:
             return {"success": False, "error": "brain_name, input_activation and output_feedback are required"}
         result = OnlineHebbianAdaptor.get_instance().apply_plastic_update(
@@ -326,7 +326,7 @@ def run(
         return result
 
     elif action == "speculative_draft":
-        from core.brain_speculative_drafter import AgentSpeculativeDrafter
+        from ..core.brain_speculative_drafter import AgentSpeculativeDrafter
         if not intention_keyword:
             return {"success": False, "error": "intention_keyword is required"}
         result = AgentSpeculativeDrafter.get_instance().draft_tool_invocation(
