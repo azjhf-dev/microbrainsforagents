@@ -5,9 +5,31 @@
 [![Zero-GPU](https://img.shields.io/badge/Hardware-Pure_NumPy_%7C_OpenCL-success.svg)](https://github.com/)
 [![Latency](https://img.shields.io/badge/Prefilter-<2ms-brightgreen.svg)](https://github.com/)
 
-**Aetheris Microbrains** is a deterministic, layered local pre-filter and tool-routing library for autonomous LLM agents running in pure NumPy (with optional OpenCL acceleration).
+**Aetheris Microbrains** (`v0.6.0`) is a deterministic, layered local pre-flight safety, code/shell verification, and tool-routing library for autonomous LLM agents built in pure NumPy (with optional OpenCL acceleration).
 
-> **Architectural Honesty Note (`v0.6.0`):** Microbrains are **not** SGD-trained deep LLMs. They are a **fast (`< 2 ms` p95 on CPU), deterministic 4-layer hybrid pre-flight safety & tool-routing library** built in pure NumPy: **Layer 0 policy & risk classes**, **Layer 1 real Python AST, secret-leak, and `shlex` shell parsers**, **Layer 2 analytically compiled Kuramoto-Hopfield / Attention matrices with SHA-256 routing and held-out split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$, $1 - \alpha = 95\%$, dynamic caller `alpha`), and **Layer 3 honest LLM / human escalation** (never silently approving abstained calls without an actual `llm_callback`).
+> **Architectural Honesty Note (`v0.6.0`):** Microbrains are **not** SGD-trained generative deep LLMs, and they do **not** replace general language reasoning. They are a **fast (`< 2 ms` p95 on CPU), deterministic 4-layer hybrid pre-filter and coprocessor** that stands *in front* of expensive cloud LLMs and runtime execution: **Layer 0 policy & risk classes**, **Layer 1 real Python AST, hardcoded secret-leak, and `shlex` shell parsers**, **Layer 2 analytically compiled Kuramoto-Hopfield / Attention matrices with SHA-256 routing and held-out split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$, $1 - \alpha = 95\%$, dynamic caller `alpha`), and **Layer 3 honest LLM / human escalation** (never silently approving abstained calls without an actual `llm_callback`).
+
+---
+
+## 💡 Why Microbrains? (For Agents, Users, and the Planet)
+
+Modern LLM agents invoke cloud foundation models on every tiny step—sending thousands of redundant tool-schema tokens just to pick a file reader, or waiting seconds for a datacenter GPU to generate a patch with a syntax error, hardcoded API key, or destructive shell command (`rm -rf`, `curl | sh`). **Aetheris Microbrains intercept those high-frequency, structural decisions locally in `< 2 ms` on CPU before any API call or tool execution happens.**
+
+### 🤖 Why Microbrains Are Useful for Autonomous Agents
+* **Prompt & Context Hygiene (MCP-Zero Narrowing):** Dynamically shrinks large tool registries (e.g., 32+ tools) down to the Top-$K$ relevant candidates (`narrow_tool_surface(top_k=4)`) in `< 1 ms`, reducing tool-schema prompt bloat by **75–87.5%** while falling back cleanly to the full catalog on ambiguous or out-of-distribution (OOD) tasks.
+* **Real Pre-Flight Structural Guardrails Before Execution:** Replaces brittle substring hacks with real **Python `ast` visitors** (supporting indented hunks, `except`/`elif` fragments, and enclosing-file `file_content` alias resolution), **secret-leak detection** (`sk-...`, `ghp_...`, `AKIA...`, PEM private keys), **AST signature/interface diffing** (`breaking_signature_change`, `public_symbol_removed`, `exception_guard_removed`), and an **allowlist-first `shlex` shell parser** that passes safe read-only commands (`ls`, `pwd`, `git log --format`, `clang-format`), blocks destructive ones, and escalates unrecognized commands.
+* **Calibrated Epistemic Humility:** Rather than forcing confident guesses on unknown queries, **split-conformal and Mondrian prediction sets** ($\alpha = 0.05$, $n_{\text{cal}} = 22$ held-out samples) detect OOD inputs (`token_coverage < 0.50` or `|C_alpha| != 1`) and explicitly abstain/escalate (`ESCALATED_TO_LLM`).
+
+### 👤 Benefits for the User
+* **Substantially Lower API Bills:** Cutting 75%+ of repeated tool-definition prompt tokens per turn and catching malformed or dangerous actions locally prevents paying cloud token fees for broken steps and retries.
+* **Instant `< 2 ms` Responsiveness:** Routine tool routing, syntax checks, and safe command verification complete in microseconds to `< 2 ms` on local CPU—no 1–5 second network round-trips for obvious decisions.
+* **Stronger Local Codebase, Data & Credential Safety:** Blocks obfuscated code sinks (`eval`, `exec`, `getattr`, `__builtins__[...]`, `base64`-to-`exec`), breaking public API removals, protected path writes (`constitution/`, `memory/bible.md`), and leaked secrets *on your machine* before execution or external transmission.
+* **Predictable, Portable & Auditable:** Zero GPU requirement, cross-process deterministic SHA-256 routing across any `PYTHONHASHSEED`, clean Python imports (`sys.path` never mutated), `allow_pickle=False` model bundles, SHA-256 weight checksums, `shadow_mode`, and JSONL audit trails.
+
+### 🌍 Ecological & Sustainable AI (Green AI) Impact
+* **Orders-of-Magnitude Lower Energy Per Gate:** Running a `< 2 ms` NumPy / AST / `shlex` pre-filter on a local CPU consumes fractions of a milliwatt-hour—**thousands of times less electricity** than waking a cluster of datacenter GPUs for a full transformer forward pass per agent loop step.
+* **Cutting Quadratic Attention Compute on Every Agent Turn:** Narrowing 32+ tool definitions down to Top-4 via `narrow_tool_surface()` eliminates ~75–87.5% of redundant tool-schema tokens across every prompt turn, shrinking total datacenter FLOPs, $\text{CO}_2\text{e}$ carbon footprint, and datacenter evaporative cooling water consumed over long multi-step autonomous runs.
+* **Hardware Longevity & Zero E-Waste Pressure:** Runs efficiently on existing laptops, edge CPUs, and legacy OpenCL GPUs without demanding continuous hardware upgrades just to route tools or validate patches.
 
 ---
 
