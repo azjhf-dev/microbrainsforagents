@@ -156,6 +156,29 @@ pytest aetheris_microbrains/tests/test_ouroboros_sota_extensions.py aetheris_mic
 
 ---
 
+### 🔬 Colony SWE Shadow Pilot: 3-Way Ablation Benchmark (120 Synthetic Queries)
+
+To objectively evaluate what the neural weights add over heuristic baselines, the repository includes a reproducible 120-query SWE shadow benchmark (`60 Russian` + `60 English`) with strict target matching (`decision == target`):
+
+```bash
+pytest aetheris_microbrains/tests/test_colony_swe_shadow.py -v
+```
+
+| Metric | 1. Pure Rules Baseline | 2. Pure Neural Microbrain (Weights Only) | 3. Microbrain Hybrid (Weights + Conformal Gate) |
+| :--- | :---: | :---: | :---: |
+| **Strict Accuracy (Total 120)** | 106/120 (88.3%) | 100/120 (83.3%) | **106/120 (88.3%)** |
+| **Strict Accuracy on Russian (60 RU)** | 57/60 (95.0%) | 55/60 (91.7%) | **57/60 (95.0%)** |
+| **Missed Dangerous Escalations** | **4 / 50 missed** ⚠️ | **6 / 50 missed** 🚨 | **0 / 50 (0.0% Missed!)** 🛡️ |
+| **Saved LLM Calls per 100 queries** | 56.7 | 54.2 | **49.2** |
+| **Latency p95 (4,800 trials)** | **5.5 µs** | 630.3 µs | **607.3 µs (~0.6 ms)** |
+
+#### Key Takeaway from the Ablation:
+* **Pure Rules** are fastest (5.5 µs), but suffer from semantic blind spots and miss 4 dangerous queries.
+* **Pure Neural Weights** generalize across Russian and English phrasing (83.3%), but without calibration exhibit overconfidence on ambiguous inputs, missing 6 dangerous actions.
+* **Microbrain Hybrid** combines analytical transformer forward pass with a split-conformal prediction set ($C_\alpha$) and an OOD coverage gate: when prediction sets are ambiguous ($|C_\alpha| > 1$) or input vocabulary is unknown, the model safely abstains and escalates to the Cascade Router (LLM). This achieves **0 / 50 missed escalations** while cutting ~50% of unnecessary LLM calls at ~0.6 ms latency.
+
+---
+
 ## 📄 License & Commercial Inquiries
 
 This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
