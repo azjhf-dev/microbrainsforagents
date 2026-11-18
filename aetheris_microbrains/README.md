@@ -1,39 +1,43 @@
 # Aetheris Microbrains (`aetheris_microbrains`)
 
-Standalone, portable copy of the Aetheris CPU/GPU microbrain suite for reuse by external and peer agents. All original files in `i:\aether` remain intact and unmodified.
+Standalone, portable suite of pure-NumPy analytical microbrains, a 4-layer structural AST/`shlex` pre-filter (`layered_decision_engine.py`), deterministic SHA-256 MoE tool routing, and held-out split-conformal abstention gates.
+
+> **Architectural Honesty Note:** Microbrains are **not** SGD-trained deep LLMs. They combine **Layer 0 deterministic policy & risk classes**, **Layer 1 Python AST & `shlex` shell parsers**, **Layer 2 analytically compiled Hopfield/Attention matrices with SHA-256 embeddings and split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$ for $1 - \alpha = 95\%$ coverage), and **Layer 3 escalation** to a remote LLM or human confirmation when OOD or ambiguous (`|C_alpha| != 1`).
 
 ## Directory Structure
 
-- `__init__.py` — Unified Python SDK entrypoint that configures `sys.path` and re-exports core microbrain architectures, GPU/OpenCL acceleration, SOTA Ouroboros neural extensions, and agent tool wrappers.
-- `core/` — Neural & cognitive core modules (62 modules + `__init__.py`), including:
-  - **OpenCL GPU Co-Processor**: `opencl_microbrain_accelerator.py` (16 PyOpenCL kernels with transparent NumPy CPU fallback)
+- `__init__.py` — Clean Python SDK entrypoint (does **not** mutate `sys.path` or shadow host modules) re-exporting the 4-layer decision engine (`decide`, `PolicyConfig`, `analyze_code_diff`, `analyze_shell_command`), core microbrain architectures, GPU/OpenCL acceleration, SOTA neural extensions, and agent tool wrappers.
+- `core/` — Neural, structural parsing, and cognitive core modules (63 modules + `__init__.py`), including:
+  - **4-Layer Structural Decision Engine**: `layered_decision_engine.py` (`decide()`, `PolicyConfig`, `evaluate_layer0_policy`, `is_protected_path`, `analyze_code_diff` AST visitor, `analyze_shell_command` `shlex` tokenizer; risk taxonomy `READ_ONLY`, `REVERSIBLE_WRITE`, `EXTERNAL_ACTION`, `IRREVERSIBLE_DESTRUCTIVE`)
+  - **OpenCL GPU Co-Processor**: `opencl_microbrain_accelerator.py` (PyOpenCL kernels with transparent NumPy CPU fallback)
   - **Microbrain Architectures**: `dendritic_tree_microbrain.py`, `kolmogorov_arnold_microbrain.py`, `linear_state_space_microbrain.py`, `microbrain_hypernetwork.py`, `liquid_state_reservoir.py`, `predictive_coding_engine.py`, `bitnet_ternary_engine.py`, `hyperdimensional_vsa_engine.py`
   - **Analytical Micro-Transformers & Nursery**: `analytical_micro_transformer.py`, `brain_nursery.py`, `brain_moe_orchestrator.py`, `brain_merger.py`, `brain_cellular_fission.py`, `brain_plasticity_updater.py`, `brain_speculative_drafter.py`, `wsp_neural_surgeon.py`, `microbrain_server.py`
-  - **Meta-Cognitive Layer (Ported & Adapted from Ouroboros)**:
+  - **Meta-Cognitive Layer**:
     - `causal_world_model.py`: Structural Causal Model (SCM) & Pearl $do$-calculus DAG.
     - `counterfactual_reasoner.py`: What-If lookahead pre-execution simulation with AST blast radius analysis.
     - `intent_persistence_tracker.py`: Trajectory-level Intent Drift Scoring (IDS) and dynamic context re-anchoring.
     - `metacognitive_calibrator.py`: Split-conformal action set coverage and epistemic/aleatoric uncertainty calibration.
     - `skill_lifecycle_manager.py`: Autonomous domain incubation, validation, degraded status, and fleet hygiene.
-  - **SOTA Ouroboros Neural Extensions**:
+  - **SOTA Neural Extensions**:
     - `weight_space_vsa.py`: 2048-D Vector Symbolic Architecture / Hyperdimensional Computing associative memory over fleet model weights.
-    - `tool_routing_moe.py`: Dynamic Top-2 Mixture of Experts (MoE) neural router with temperature gating across 6 specialized clusters.
-    - `critical_ensemble_abstention.py`: Multi-brain consensus voting with selective prediction & conformal abstention (variance > 0.09 escalation).
-    - `cascade_ensemble.py`: Four-tier cascading decision pipeline (Intent Triage -> Tool Selection -> Constitutional Gate -> Pre-Action Check).
+    - `tool_routing_moe.py`: Deterministic SHA-256 Top-2 Mixture of Experts (MoE) router across 6 clusters & 32 reachable tools with explicit OOD abstention (`conformal_passed=False`).
+    - `critical_ensemble_abstention.py`: Multi-brain consensus voting integrated with Layer 0/1 AST & path checks and selective conformal abstention.
+    - `cascade_ensemble.py`: Four-tier cascading decision pipeline routed through Layer 0/1 structural AST/`shlex` checks (`ls`/`pwd` pass without false blocks).
     - `continual_learning_pipeline.py`: Online plasticity and continual learning with Elastic Weight Consolidation (EWC) Fisher Information protection.
     - `plasticity_cycle.py`: Automated scheduled plasticity cycles for continual adaptation without catastrophic forgetting.
     - `microbrain_telemetry.py`: Nanosecond-precision inference telemetry with 10MB log rotation, ECE calculation, and health dashboard export.
-    - `counterfactual_simulation_pipeline.py`: Three-step forward rollout blast-radius simulation before applying code mutations.
-- `evolution/` — Weight-Space Programming (WSP) & client modules (12 modules + `opencl_microbrain_accelerator.py` compatibility shim):
-  - `wsp_engine.py`, `wsp_substrate.py`, `wsp_lenses.py`, `wsp_sae.py`, `wsp_merger.py`, `wsp_hebbian.py`, `wsp_sleep_consolidation.py`, `wsp_liquid_router.py`, `wsp_ab_probe.py`, `wsp_epistemic_oracle.py`, `wsp_sandbox_tracer.py`, `dsh_microbrain_client.py`
+    - `counterfactual_simulation_pipeline.py`: Pre-commit blast-radius gate backed by Layer 1 Python AST & hunk analysis.
+- `evolution/` — Weight-Space Programming (WSP) & client modules (13 modules + `__init__.py`):
+  - `wsp_engine.py`, `wsp_substrate.py`, `wsp_lenses.py`, `wsp_sae.py`, `wsp_merger.py`, `wsp_hebbian.py`, `wsp_sleep_consolidation.py`, `wsp_liquid_router.py`, `wsp_ab_probe.py`, `wsp_epistemic_oracle.py`, `wsp_sandbox_tracer.py`, `dsh_microbrain_client.py`, `opencl_microbrain_accelerator.py` (compatibility shim)
 - `tools/` — Agent tool wrappers (`microbrain.py`, `microbrain_lab.py`, `neuro_brain_incubator.py`, `neuro_route.py`, `wsp_tensor_surgeon.py`, `conformal_collector.py`)
-- `memory/` — Fleet registries (`fleet_lifecycle_registry.json`), weight space VSA store (`store/weight_space_vsa.npz`), and pre-trained `store/neuro_brains/` weight & metadata fleet (83 files) plus `opencl_crossover.json`
-- `tests/` — Comprehensive test suites including `test_ouroboros_sota_extensions.py` (11 test files)
+- `memory/` — Fleet registries (`fleet_lifecycle_registry.json`), weight space VSA store (`store/weight_space_vsa.npz`), analytically compiled & split-conformal calibrated `store/neuro_brains/` fleet (87 files), and `opencl_crossover.json`
+- `tests/` — Verification suites (14 `test_*.py` suites + `conftest.py`), including `test_reviewer_probe_suite.py`, `test_adversarial_safety_suite.py`, `test_colony_swe_shadow.py`, and `test_ouroboros_sota_extensions.py`
 
 ## Exported SDK Symbols
 
 | Category | Symbols |
 | --- | --- |
+| **4-Layer Decision Engine** | `decide`, `PolicyConfig`, `evaluate_layer0_policy`, `is_protected_path`, `analyze_code_diff`, `analyze_shell_command` |
 | **GPU / OpenCL Co-Processor** | `OpenCLMicroBrainAccelerator`, `get_opencl_accelerator` |
 | **Microbrain Cores** | `DendriticTreeMicroBrain`, `KolmogorovArnoldMicroBrain`, `LinearStateSpaceMicroBrain`, `MicroBrainHypernetwork`, `LiquidStateReservoir`, `HierarchicalPredictiveCodingEngine` (`PredictiveCodingEngine`), `PredictiveCodingLayer`, `BitLinearLayer`, `BitNetQuantizer` (`BitNetTernaryEngine`), `HyperdimensionalVSAEngine` |
 | **Nursery & Surgery** | `AnalyticalMicroTransformer`, `STORE_DIR`, `AutonomousBrainNursery` (`BrainNursery`), `get_brain_nursery`, `WSPNeuralSurgeon` |
@@ -43,31 +47,46 @@ Standalone, portable copy of the Aetheris CPU/GPU microbrain suite for reuse by 
 
 ## Quickstart Examples
 
-### 1. Direct Python SDK Import (Works from Any Working Directory)
+### 0. Unified 4-Layer Decision Contract
 
 ```python
-import sys
-sys.path.insert(0, r"i:\aether")
-
 import aetheris_microbrains as mb
 
-# Inspect the pre-trained neuro-brains fleet
+verdict = mb.decide({
+    "tool": "edit_file",
+    "path": "src/server.py",
+    "diff": "def f():\n    os.system(cmd)\n",
+})
+print(verdict)
+# {'decision': 'deny', 'label': 'dangerous_method:os.system', 'layer': 1, ...}
+```
+
+### 1. Direct Python SDK Import & Split-Conformal Domain Consultation
+
+Install in editable mode (`pip install -e .`) and import cleanly without mutating `sys.path`:
+
+```python
+import aetheris_microbrains as mb
+
+# Inspect the pre-compiled & calibrated neuro-brains fleet
 status = mb.microbrain_status()
 print(f"Loaded domains: {status['count']}")
 
-# Consult the best-matching brain for a token query
-reply = mb.microbrain_consult(text="synthesize new cognitive concepts from memory")
-print(reply)
+# Consult the best-matching brain with conformal calibration metadata
+reply = mb.microbrain_consult(text="syntax error in AST parser during code edit")
+print("Selected Brain:", reply["selected_brain"])
+print("Calibrated Confidence:", reply["calibrated_confidence"])
+print("Calibration Samples:", reply["n_calibration_samples"], "Valid:", reply["conformal_guarantee_valid"])
 ```
 
-### 2. SOTA Top-2 Mixture of Experts (MoE) Dynamic Tool Routing
+### 2. Deterministic Top-2 Mixture of Experts (MoE) Tool Routing
 
 ```python
 import aetheris_microbrains as mb
 
 moe = mb.get_tool_routing_moe()
-decision = moe.route("inspect file contents and write safe patch")
-print("Selected Tool:", decision.selected_tool)
+decision = moe.route("inspect file contents and write safe patch to repository")
+print("Selected Tool:", decision.selected_tool)   # -> repo_write (deterministic across runs)
 print("Top Experts:", decision.top_experts)
 print("Conformal Guarantee:", decision.conformal_passed)
 ```
@@ -82,7 +101,7 @@ nearest = vsa.find_nearest_domains("tool_routing_v2", top_k=3)
 print("Nearest Domains in Weight Space:", nearest)
 ```
 
-### 4. Cascade Ensemble & Pre-Commit Counterfactual Simulation
+### 4. Pre-Commit Structural AST & Counterfactual Safety Gate
 
 ```python
 import aetheris_microbrains as mb
@@ -97,10 +116,9 @@ print("Status:", outcome.status)
 print("Step Rollouts:", outcome.step_predictions)
 ```
 
-### 5. Running the FastAPI Microbrain Server
-
-From inside `i:\aether\aetheris_microbrains`:
+### 5. Running Tests & the FastAPI Microbrain Server
 
 ```bash
-python core/microbrain_server.py
+pytest aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
+python -m aetheris_microbrains.core.microbrain_server
 ```
