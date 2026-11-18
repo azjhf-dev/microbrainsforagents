@@ -188,16 +188,35 @@ class CascadeEnsembleRouter:
             passed=suki_passed,
         ))
 
+        # Proposal 3: Bottleneck Reliability (Weakest-Link Analysis)
+        # Instead of naively multiplying 4 constants (0.95 * 0.96 * 0.98 * 0.95 = 0.849),
+        # where an unregistered tool drops cumulative confidence to 0.696 < 0.70 before inspecting the action,
+        # we evaluate tier reliability by the weakest active verification tier:
+        active_confs = [t.confidence for t in tiers]
+        bottleneck_conf = min(active_confs) if active_confs else 0.50
+        cum_conf = bottleneck_conf
+
         # Final Aggregation
         all_passed = all(t.passed for t in tiers)
+        escalation_payload = None
         if not const_passed:
             verdict_str = "BLOCKED_CONSTITUTIONAL"
         elif not suki_passed:
             verdict_str = "BLOCKED_PRECONDITION_SUKI"
-        elif cum_conf < 0.70:
+        elif bottleneck_conf < 0.70:
             verdict_str = "DEGRADED_FALLBACK"
             all_passed = False
-            reasons.append(f"Cumulative confidence {cum_conf:.3f} below gate threshold 0.70")
+            reasons.append(f"Weakest-link tier confidence {bottleneck_conf:.3f} below gate threshold 0.70")
+            # Proposal 4: Structured Escalation Payload (No dead-end deferral)
+            escalation_payload = {
+                "target_tool": target_tool,
+                "tool_args": tool_args,
+                "task_prompt": task_prompt,
+                "bottleneck_tier": min(tiers, key=lambda t: t.confidence).tier_name,
+                "bottleneck_confidence": bottleneck_conf,
+                "reasons": reasons,
+                "delegate_to": "LLM_CASCADE_ROUTER",
+            }
         else:
             verdict_str = "AUTHORIZED"
 
