@@ -1,0 +1,20 @@
+Aetheris Microbrains - fork attribution
+========================================
+
+This repository is a fork of:
+
+    microbrainsforagents
+    Copyright (c) 2026 Dmitry Tikov <drtikov@gmail.com>
+    https://github.com/drtikov/microbrainsforagents
+
+Upstream is licensed under the PolyForm Noncommercial License 1.0.0; see
+LICENSE. That license permits use, modification, and distribution for
+NONCOMMERCIAL purposes only, with this notice preserved. Commercial use
+requires a separate license from the original author.
+
+Fork changes (azjhf-dev):
+  * aetheris_microbrains/shims/ - deterministic precheck adapters for a
+    pi-style coding agent and a DeepSeek-style (OpenAI-compatible) web
+    harness, built on the upstream 4-layer decision engine.
+  * examples/05_pi_precheck_shim.py, examples/06_deepseek_harness_shim.py
+  * aetheris_microbrains/tests/test_harness_shims.py

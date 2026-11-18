@@ -269,3 +269,46 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
 For commercial licensing inquiries, please contact:
 **Dmitry Tikov** — [drtikov@gmail.com](mailto:drtikov@gmail.com)
+
+---
+
+## 🔌 Harness Precheck Shims (fork addition: pi coding agent + DeepSeek web harness)
+
+This fork adds `aetheris_microbrains/shims/` - a stable integration surface that puts the deterministic 4-layer engine in front of an agent harness, vetting every shell command, patch, and tool call **before execution**. It keeps what is real in the upstream engine (fail-closed policy, `ast`/`shlex` structural parsing, secret-leak detection, conformal abstention) and never asks the fake-neural parts to decide anything.
+
+**pi-style coding agent:**
+
+```python
+from aetheris_microbrains.shims import PiAgentPrecheck, PrecheckBlocked
+
+gate = PiAgentPrecheck(journal_path="precheck.jsonl")   # JSONL audit trail
+
+v = gate.before_tool_call("bash", {"command": "cargo test"})
+v.allowed            # True  -> execute now, no LLM round trip
+v.action == "deny"   # e.g. rm -rf /, curl|sh, dd, secret leak in a patch
+v.needs_review       # escalate to the LLM or a human
+
+# or wrap an executor so every call is gated automatically:
+run_bash = gate.wrap("bash", run_bash)   # raises PrecheckBlocked on deny/escalate
+```
+
+**DeepSeek-style (OpenAI-compatible) web harness:**
+
+```python
+from aetheris_microbrains.shims import DeepSeekHarnessPrecheck
+
+gate = DeepSeekHarnessPrecheck(extra_shell_allowlist=["npm", "cargo"])
+
+# Inbound: shrink a big tool registry before the API call (~75%+ schema-token cut,
+# honest fallback to the full catalog on out-of-distribution tasks):
+res = gate.narrow_tool_schemas(task, tool_schemas, top_k=4)
+
+# Outbound: vet every tool_call the model returns before executing it:
+for call, verdict in gate.intercept_message(assistant_message):
+    if verdict.allowed:
+        execute(call)
+```
+
+Design contract: the shim never executes anything itself; `escalate` always means "hand this to the LLM/human", never a silent allow; `shadow_mode=True` journals what *would* be blocked so you can measure false positives before enforcing. Runnable demos: `examples/05_pi_precheck_shim.py`, `examples/06_deepseek_harness_shim.py`. Tests: `aetheris_microbrains/tests/test_harness_shims.py`.
+
+**License note:** upstream is PolyForm Noncommercial 1.0.0 (see LICENSE/NOTICE) - noncommercial use with attribution is fine; commercial use requires a license from the original author (Dmitry Tikov).
