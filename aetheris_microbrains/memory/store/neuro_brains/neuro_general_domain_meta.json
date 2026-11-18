@@ -200,12 +200,12 @@
   },
   "conformal_quantile": 0.05570000410079956,
   "per_class_quantiles": {
-    "execute_plan": 0.0557,
-    "perform_ceremony": 0.045246,
-    "synthesize_solution": 0.03949,
-    "authorize_action": 0.0557,
-    "restore_intent": 0.042118,
-    "quarantine_scope": 0.044443
+    "execute_plan": 0.05570000410079956,
+    "perform_ceremony": 0.045246005058288574,
+    "synthesize_solution": 0.039490461349487305,
+    "authorize_action": 0.05570000410079956,
+    "restore_intent": 0.04211771488189697,
+    "quarantine_scope": 0.044443488121032715
   },
   "per_class_counts": {
     "execute_plan": 2,
@@ -247,5 +247,5 @@
   "weights_sha256": "74b15c22cf710a67764d1e0828588957251fe3517b2becdd62255c5fb32cea80",
   "hopfield_rules_count": 58,
   "induction_heads": [],
-  "updated_at": 1794965900.261227
+  "updated_at": 1794968127.2482817
 }

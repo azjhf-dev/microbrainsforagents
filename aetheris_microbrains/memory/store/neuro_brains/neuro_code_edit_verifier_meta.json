@@ -114,9 +114,9 @@
   },
   "conformal_quantile": 0.0211867094039917,
   "per_class_quantiles": {
-    "verifier_verdict_reject_safety": 0.021127,
-    "verifier_verdict_accept": 0.021087,
-    "precondition_enforced": 0.021187
+    "verifier_verdict_reject_safety": 0.02112734317779541,
+    "verifier_verdict_accept": 0.021087229251861572,
+    "precondition_enforced": 0.0211867094039917
   },
   "per_class_counts": {
     "verifier_verdict_reject_safety": 12,
@@ -155,5 +155,5 @@
   "weights_sha256": "3611117ec5ff88062a124011ee13a8b442c1dae3836e69d9c3a7132744f366f0",
   "hopfield_rules_count": 43,
   "induction_heads": [],
-  "updated_at": 1794965900.0673416
+  "updated_at": 1794968127.4458613
 }

@@ -281,20 +281,34 @@ class StructuralCausalModel:
             guards.append("Wait for repository lock release.")
             risk_score += 0.30
 
-        # Consult Neural Microbrain (Causal World Model / Counterfactual Reasoner)
-        neural_conf = 0.85
+        # Consult Neural Microbrain using structural input features BEFORE finalizing verdict
+        struct_tokens: List[str] = [
+            "syntax_valid" if ast_ok else "syntax_invalid",
+            "preconditions_ok" if precond_ok else "precondition_breach",
+            "ancestral_core" if ancestral else "regular_module",
+            "high_blast_radius" if blast_radius >= 4 else "low_blast_radius",
+        ]
+        neural_conf = round(max(0.0, 1.0 - min(1.0, risk_score)), 4)
+        neural_veto = False
         try:
             from .brain_moe_orchestrator import consult_microbrain
 
-            token = "breaking_change" if risk_score >= 0.5 else "causal_stable"
-            res = consult_microbrain("counterfactual_reasoner", [token])
-            if isinstance(res, dict) and res.get("confidence"):
-                neural_conf = float(res["confidence"])
-        except Exception:
-            pass
+            res = consult_microbrain("counterfactual_reasoner", struct_tokens)
+            if isinstance(res, dict) and res.get("success", True):
+                if res.get("confidence") is not None:
+                    neural_conf = float(res["confidence"])
+                pred_tok = str(res.get("predicted_token") or "").lower()
+                if not res.get("abstained", False) and any(
+                    w in pred_tok for w in ("abort", "veto", "breaking", "reject", "unsafe")
+                ):
+                    neural_veto = True
+                    hazards.append(f"neural_counterfactual_veto:{pred_tok}")
+                    risk_score += 0.25
+        except Exception as exc:
+            hazards.append(f"neural_module_unavailable:{type(exc).__name__}")
 
         risk_score = min(1.0, max(0.0, risk_score))
-        is_safe = risk_score < 0.45 and ast_ok and precond_ok
+        is_safe = (risk_score < 0.45) and ast_ok and precond_ok and (not neural_veto)
 
         return CausalSimulationResult(
             query_type="interventional" if interventions else "observational",

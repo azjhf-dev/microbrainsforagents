@@ -66,23 +66,46 @@
     "27": "failure_recoverable_by_retry",
     "28": "subtask_step_1"
   },
-  "conformal_quantile": 0.05,
-  "per_class_quantiles": {},
-  "per_class_counts": {},
-  "conformal_alpha": 0.1,
+  "conformal_quantile": 0.01230478286743164,
+  "per_class_quantiles": {
+    "subtask_step_1": 0.01230478286743164,
+    "decompose_objective_atomic": 0.01230478286743164
+  },
+  "per_class_counts": {
+    "subtask_step_1": 21,
+    "decompose_objective_atomic": 1
+  },
+  "conformal_alpha": 0.05,
   "conformal_scores": [
-    0.01,
-    0.02,
-    0.03,
-    0.04,
-    0.05
+    0.01230478286743164,
+    0.012208402156829834,
+    0.012148022651672363,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164,
+    0.012138724327087402,
+    0.012138724327087402,
+    0.01230478286743164
   ],
-  "n_calibration_samples": 5,
-  "coverage_std_error": 0.1134,
-  "conformal_guarantee_valid": false,
+  "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
-  "weights_sha256": "cef75efaddb24056fef7c7bbc73676c573ecf61577a54dceffe53ff84641958e",
-  "hopfield_rules_count": 1,
+  "weights_sha256": "19bcc6bfaf99ff966170bfbbb13a24f6ea111a32e33c125759fe5a30e3ef805b",
+  "hopfield_rules_count": 24,
   "induction_heads": [],
-  "updated_at": 1794965900.5234199
+  "updated_at": 1794968130.160221
 }

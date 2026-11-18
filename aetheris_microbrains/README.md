@@ -140,11 +140,17 @@ print(obs["decision"], obs["shadow_decision"], obs["input_sha256"])
 pipeline = mb.ContinualLearningPipeline()
 staged = pipeline.apply_plasticity_feedback("code_edit_verifier", ["new_ast_pattern"], promote=False)
 print(staged.candidate_staged, staged.promoted)
+
+# Sliding-window drift telemetry & Gibbs-Candès ACI adaptation
+tel = mb.get_microbrain_telemetry()
+q_next = tel.update_aci_quantile(current_q=0.05, had_error=True, alpha=0.05, gamma=0.02)
+dash = tel.generate_dashboard(window_size=100)
+print(dash.sliding_window_coverage, dash.drift_detected, q_next)
 ```
 
 ### 6. Running Tests & the FastAPI Microbrain Server
 
 ```bash
-pytest aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
+pytest aetheris_microbrains/tests/test_end_to_end_economics_and_drift.py aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
 python -m aetheris_microbrains.core.microbrain_server
 ```

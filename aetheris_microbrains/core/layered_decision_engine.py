@@ -405,6 +405,79 @@ class _SecurityASTVisitor(ast.NodeVisitor):
             self.findings.append(f"obfuscated_getattr_sink:{attr_str}")
 
 
+def _extract_defs_from_lines(lines: List[str]) -> Tuple[Dict[str, Tuple[int, int]], int]:
+    """Parse function/class signatures (`name -> (min_pos, max_pos)` or `(-1, -1)` for class) & try count."""
+    if not lines:
+        return {}, 0
+    cleaned: List[str] = []
+    for idx, ln in enumerate(lines):
+        cleaned.append(ln)
+        stripped = ln.strip()
+        if re.match(r"^(?:async\s+)?def\s+\w+\s*\(.*\)\s*(?:->\s*[^:]+)?:\s*$", stripped) or re.match(r"^class\s+\w+.*:\s*$", stripped):
+            next_ln = lines[idx + 1] if idx + 1 < len(lines) else ""
+            next_indent = len(next_ln) - len(next_ln.lstrip(" "))
+            cur_indent = len(ln) - len(ln.lstrip(" "))
+            if not next_ln.strip() or next_indent <= cur_indent:
+                cleaned.append(" " * (cur_indent + 4) + "pass")
+    src = textwrap.dedent("\n".join(cleaned)).strip()
+    if not src:
+        return {}, 0
+    tree = _parse_python_with_context(src)
+    if tree is None:
+        return {}, 0
+
+    defs: Dict[str, Tuple[int, int]] = {}
+    try_count = 0
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name != "_hunk_ctx":
+            total_pos = len(node.args.posonlyargs) + len(node.args.args)
+            min_pos = max(0, total_pos - len(node.args.defaults))
+            max_pos = 10_000 if node.args.vararg is not None else total_pos
+            defs[node.name] = (min_pos, max_pos)
+        elif isinstance(node, ast.ClassDef):
+            defs[node.name] = (-1, -1)
+        elif isinstance(node, ast.Try):
+            try_count += 1
+    return defs, try_count
+
+
+def _detect_interface_hazards(raw_lines: List[str], tree_new: ast.AST) -> List[str]:
+    """Detect breaking signature changes, public symbol removals, or dropped try/except guards."""
+    removed_lines: List[str] = []
+    added_lines: List[str] = []
+    context_lines: List[str] = []
+    for ln in raw_lines:
+        if ln.startswith(("--- ", "+++ ", "@@ ")):
+            continue
+        if ln.startswith("-"):
+            removed_lines.append(ln[1:])
+        elif ln.startswith("+"):
+            added_lines.append(ln[1:])
+        elif ln.startswith(" "):
+            context_lines.append(ln[1:])
+
+    if not removed_lines:
+        return []
+
+    old_defs, old_tries = _extract_defs_from_lines(removed_lines)
+    new_defs, _ = _extract_defs_from_lines(added_lines + context_lines)
+    new_tries = sum(1 for n in ast.walk(tree_new) if isinstance(n, ast.Try))
+    hazards: List[str] = []
+
+    for sym, (old_min, old_max) in old_defs.items():
+        if sym in new_defs:
+            new_min, new_max = new_defs[sym]
+            if old_min >= 0 and new_min >= 0 and (new_min != old_min or new_max < old_max):
+                hazards.append(f"breaking_signature_change:{sym}")
+        elif not sym.startswith("_"):
+            hazards.append(f"public_symbol_removed:{sym}")
+
+    if old_tries > new_tries and any("try:" in l for l in removed_lines) and not any("try:" in l for l in added_lines):
+        hazards.append("exception_guard_removed")
+
+    return list(dict.fromkeys(hazards))
+
+
 def analyze_code_diff(
     file_path: Optional[str],
     diff_text: Optional[str],
@@ -421,6 +494,7 @@ def analyze_code_diff(
             "syntax_valid": True,
             "security_clean": True,
             "findings": [],
+            "interface_hazards": [],
             "line_count": 0,
             "ast_nodes": [],
             "context_ast_parsed": False,
@@ -465,6 +539,7 @@ def analyze_code_diff(
             "syntax_valid": json_ok,
             "security_clean": True,
             "findings": [] if json_ok else ["malformed_json_hunk"],
+            "interface_hazards": [],
             "line_count": line_count,
             "ast_nodes": [],
             "context_ast_parsed": False,
@@ -483,6 +558,7 @@ def analyze_code_diff(
             "syntax_valid": True,
             "security_clean": len(non_py_findings) == 0,
             "findings": non_py_findings,
+            "interface_hazards": [],
             "line_count": line_count,
             "ast_nodes": [],
             "context_ast_parsed": False,
@@ -514,6 +590,7 @@ def analyze_code_diff(
             "syntax_valid": False,
             "security_clean": False,
             "findings": ["syntax_tree_malformed"],
+            "interface_hazards": [],
             "line_count": line_count,
             "ast_nodes": [],
             "context_ast_parsed": context_ast_parsed,
@@ -525,6 +602,8 @@ def analyze_code_diff(
         visitor.dangerous_aliases.update(seed_visitor.dangerous_aliases)
         visitor.decoded_vars.update(seed_visitor.decoded_vars)
     visitor.visit(tree)
+
+    interface_hazards = _detect_interface_hazards(raw_lines, tree) if has_unified else []
 
     ast_nodes: List[str] = []
     for node in ast.walk(tree):
@@ -540,6 +619,7 @@ def analyze_code_diff(
         "syntax_valid": True,
         "security_clean": len(visitor.findings) == 0,
         "findings": list(dict.fromkeys(visitor.findings)),
+        "interface_hazards": interface_hazards,
         "line_count": line_count,
         "ast_nodes": list(dict.fromkeys(ast_nodes)),
         "context_ast_parsed": context_ast_parsed,

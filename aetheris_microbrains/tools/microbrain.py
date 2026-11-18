@@ -23,7 +23,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -108,40 +108,109 @@ def _load_brain(name: str):
     return brain
 
 
+_SWE_BILINGUAL_SYNONYMS: Dict[str, List[str]] = {
+    "failing": ["failing", "failing_test", "tests_failed"],
+    "failed": ["failed", "tests_failed", "failing_test"],
+    "failure": ["failure", "failing_test", "failure_severity_benign"],
+    "test": ["test", "pytest", "unit_test"],
+    "tests": ["tests", "pytest", "unit_test"],
+    "bug": ["bug", "traceback"],
+    "исправь": ["fix", "bug", "edit"],
+    "исправить": ["fix", "bug", "edit"],
+    "ошибка": ["error", "bug", "exception", "syntax_error"],
+    "ошибку": ["error", "bug", "exception", "syntax_error"],
+    "тест": ["test", "pytest", "unit_test"],
+    "тесты": ["test", "pytest", "unit_test"],
+    "тестов": ["test", "pytest", "unit_test"],
+    "падающий": ["failing_test", "failing", "tests_failed"],
+    "синтаксис": ["syntax", "syntax_error", "syntax_tree_malformed"],
+    "синтаксиса": ["syntax", "syntax_error", "syntax_tree_malformed"],
+    "парсер": ["parser", "ast"],
+    "парсере": ["parser", "ast"],
+    "прочитай": ["read", "inspect", "repo_read"],
+    "файл": ["file", "source", "repo_read"],
+    "файле": ["file", "source"],
+    "напиши": ["write", "implement", "repo_write"],
+    "патч": ["patch", "code", "repo_write"],
+    "коммит": ["commit", "git"],
+    "ветку": ["branch", "git"],
+    "память": ["memory", "recall"],
+    "памяти": ["memory", "recall"],
+}
+
+
 def _tokenize(text: str) -> List[str]:
-    """Unicode-aware tokenization supporting Cyrillic and Latin SWE terms (Proposal 2)."""
+    """Unicode-aware tokenization supporting Cyrillic, Latin, compound bigrams, and technical SWE terms."""
     return [t for t in re.findall(r"(?u)\b\w+\b", str(text or "").lower()) if t]
 
 
+def _expand_query_tokens(tokens: List[str]) -> Tuple[List[str], List[List[str]]]:
+    """Build candidate match groups per raw token plus adjacent snake_case bigrams.
+
+    Preserves exact OOD resistance because each raw position contributes at most 1 overlap
+    credit regardless of synonym count, and casual words produce no SWE expansions.
+    """
+    expanded: List[str] = []
+    position_groups: List[List[str]] = []
+    for i, t in enumerate(tokens):
+        grp = [t]
+        if t in _SWE_BILINGUAL_SYNONYMS:
+            grp.extend(s for s in _SWE_BILINGUAL_SYNONYMS[t] if s not in grp)
+        if i + 1 < len(tokens):
+            bigram = f"{t}_{tokens[i + 1]}"
+            grp.append(bigram)
+            if bigram == "failing_test" and "failing_test" not in grp:
+                grp.append("failing_test")
+        position_groups.append(grp)
+        expanded.extend(grp)
+
+    # Deduplicate expanded tokens preserving priority order
+    seen = set()
+    unique_expanded = []
+    for tok in expanded:
+        if tok not in seen:
+            seen.add(tok)
+            unique_expanded.append(tok)
+    return unique_expanded, position_groups
+
+
 def _route(tokens: List[str]) -> Dict[str, Any]:
-    """Best brain by vocabulary overlap; deterministic tie-breaking (Proposals 2 & 4)."""
+    """Best brain by raw-position vocabulary overlap with compound/bilingual SWE matching."""
     metas = _list_brain_metas()
     if not metas:
         return {"success": True, "abstained": True, "domain": None,
                 "reason": "no trained brains found in memory/store/neuro_brains"}
-    
-    # Deterministic sorting of metas by name to eliminate PYTHONHASHSEED bias
-    metas = sorted(metas, key=lambda m: str(m.get("_name") or m.get("name") or ""))
 
-    best, best_hits = None, 0
+    metas = sorted(metas, key=lambda m: str(m.get("_name") or m.get("name") or ""))
+    expanded, pos_groups = _expand_query_tokens(tokens)
+
+    # Prefer core calibrated safety/intent brains cleanly on ties
+    best, best_hits, best_score = None, 0, -1.0
     for meta in metas:
         vocab = _brain_vocab(meta)
-        hits = sum(1 for t in tokens if t in vocab)
-        if hits > best_hits or (hits == best_hits and best is None):
-            best, best_hits = meta, hits
+        hits = sum(1 for grp in pos_groups if any(cand in vocab for cand in grp))
+        # Extra specificity weight for exact bigram / compound hits (e.g. failing_test)
+        compound_hits = sum(1 for tok in expanded if "_" in tok and tok in vocab)
+        score = float(hits) + 0.35 * float(compound_hits)
+        if score > best_score or (score == best_score and best is None):
+            best, best_hits, best_score = meta, hits, score
+
     overlap = best_hits / max(1, len(tokens))
-    
-    # Proposal 3: Conformal OOD coverage check.
-    # If overlap < 0.25 (less than 25% of input tokens matched), declare abstention
+
+    # Strict conformal OOD coverage check on distinct raw input positions
     if best_hits == 0 or overlap < 0.25:
         domains = [str(m.get("_name") or "?") for m in metas]
         return {"success": True, "abstained": True, "domain": None,
                 "selected_brain": None,
                 "calibrated_confidence": 0.0,
+                "prediction_set": [],
+                "set_size": 0,
+                "reason_code": "ood_coverage_breach",
                 "reason": "OOD coverage breach: input shares insufficient vocabulary with trained domains",
                 "overlap": round(overlap, 3),
                 "available_domains": domains}
     return {"success": True, "abstained": False, "domain": best,
+            "expanded_tokens": expanded,
             "overlap": round(overlap, 3)}
 
 
@@ -150,9 +219,7 @@ def microbrain_consult(text: str = "", tokens: Optional[List[str]] = None,
     """Consult the trained microbrain fleet with a token sequence.
 
     Routes to the brain whose training vocabulary best matches the input,
-    returns its next-token prediction and conformal verdict.  Honest by
-    construction: out-of-distribution input abstains instead of guessing,
-    and an uncalibrated brain reports its calibration state verbatim.
+    returns its prediction set and conformal verdict.
     """
     if _disabled():
         return {"success": False, "error": "microbrain tools disabled "
@@ -175,7 +242,9 @@ def microbrain_consult(text: str = "", tokens: Optional[List[str]] = None,
         return {"success": False, "error": f"brain {name} failed to load "
                 "(weights missing or unreadable)"}
 
-    seq = [t if t in getattr(brain, "vocab", {}) else "<unk>" for t in tokens]
+    candidate_tokens = route.get("expanded_tokens") or tokens
+    in_vocab_seq = [t for t in candidate_tokens if t in getattr(brain, "vocab", {})]
+    seq = in_vocab_seq if in_vocab_seq else [t if t in getattr(brain, "vocab", {}) else "<unk>" for t in tokens]
     seq = seq[: int(getattr(brain, "max_seq_len", 16) or 16)]
     try:
         fwd = brain.forward(seq)
@@ -187,6 +256,7 @@ def microbrain_consult(text: str = "", tokens: Optional[List[str]] = None,
         conf = {}
 
     calibrated_conf = round(float(conf.get("confidence") or fwd.get("confidence") or 0.0), 4)
+    pred_set = list(conf.get("prediction_set", []))
     result = {
         "success": True,
         "abstained": False,
@@ -196,6 +266,9 @@ def microbrain_consult(text: str = "", tokens: Optional[List[str]] = None,
         "overlap": route.get("overlap"),
         "predicted_token": fwd.get("predicted_token"),
         "confidence": fwd.get("confidence"),
+        "prediction_set": pred_set,
+        "set_size": len(pred_set),
+        "reason_code": str(conf.get("reason") or "ok"),
         "conformal_abstained": bool(conf.get("abstained")),
         "conformal_reason": str(conf.get("reason") or ""),
         "conformal_basis": str(meta.get("conformal_basis") or "uncalibrated"),

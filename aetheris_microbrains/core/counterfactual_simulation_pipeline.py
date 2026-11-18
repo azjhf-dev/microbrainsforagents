@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .cascade_ensemble import get_cascade_ensemble_router
+from .causal_world_model import get_causal_world_model
 from .critical_ensemble_abstention import get_critical_ensemble
 from .layered_decision_engine import analyze_code_diff
 
@@ -102,29 +103,53 @@ class CounterfactualSimulationPipeline:
             else:
                 failure_modes.append(f"Step 1: Security risk detected in AST ({', '.join(diff_analysis['findings'])})")
 
-        # Step 2: Import & Interface propagation blast radius
+        # Step 2: AST Interface/Signature Diff & Import Propagation Blast Radius
         line_count = len(diff_text.splitlines())
-        blast_score = min(1.0, line_count / 600.0)
-        step_2_ok = blast_score < 0.80
-        step_predictions.append(f"Step 2 (Interface Cascade): {'PASS' if step_2_ok else 'WARN_HIGH_BLAST'}")
+        interface_hazards = list(diff_analysis.get("interface_hazards", []))
+        blast_score = min(1.0, (line_count / 600.0) + 0.45 * len(interface_hazards))
+        step_2_ok = (blast_score < 0.80) and (len(interface_hazards) == 0)
+        step_predictions.append(
+            f"Step 2 (Interface Cascade): {'PASS' if step_2_ok else ('WARN_BREAKING_INTERFACE' if interface_hazards else 'WARN_HIGH_BLAST')}"
+        )
         if not step_2_ok:
-            failure_modes.append(f"Step 2: Massive diff blast radius ({line_count} lines) risks regression")
+            if interface_hazards:
+                failure_modes.append(f"Step 2: Breaking API/interface change ({', '.join(interface_hazards)})")
+            else:
+                failure_modes.append(f"Step 2: Massive diff blast radius ({line_count} lines) risks regression")
 
-        # Step 3: Runtime verification expectation
-        step_3_ok = step_1_ok and (blast_score < 0.85)
-        step_predictions.append(f"Step 3 (Metabolic Stability): {'PASS' if step_3_ok else 'FAIL'}")
+        # Step 3: Causal SCM do-Intervention Rollout
+        scm = get_causal_world_model(self.repo_dir)
+        causal_res = scm.counterfactual_query(
+            observed_action="apply_patch",
+            observed_target=file_path,
+            observed_outcome_broken=not (step_1_ok and step_2_ok),
+            counterfactual_do={
+                "action_type": "apply_patch",
+                "target_path": file_path,
+                "preconditions_satisfied": True,
+                "ast_validity": step_1_ok,
+                "downstream_blast_radius": max(len(interface_hazards) * 2, 4 if line_count > 480 else 0),
+                "lock_contention": False,
+            },
+            proposed_code=None,
+        )
+        step_3_ok = bool(causal_res.is_safe and step_1_ok and step_2_ok)
+        reg_prob = float(causal_res.predicted_outcomes.get("regression_probability", 0.95 if not step_3_ok else blast_score * 0.4))
+        step_predictions.append(
+            f"Step 3 (Causal SCM Rollout [p_reg={reg_prob:.2f}]): {'PASS' if step_3_ok else 'FAIL'}"
+        )
         if not step_3_ok:
-            failure_modes.append("Step 3: Downstream test suite failure predicted")
+            failure_modes.extend(causal_res.causal_mechanisms_triggered or ["Step 3: Causal intervention predicts regression"])
 
         overall_pass = step_1_ok and step_2_ok and step_3_ok
-        regression_prob = blast_score * 0.4 if step_1_ok else 0.95
+        regression_prob = reg_prob if not overall_pass else min(0.5, max(blast_score * 0.4, reg_prob * 0.5))
 
         return SimulationOutcome(
             allowed=overall_pass,
             status="APPROVED_FOR_PATCH" if overall_pass else "VETOED_HIGH_RISK_BLAST",
             blast_radius_score=round(blast_score, 3),
             regression_probability=round(regression_prob, 3),
-            simulated_failure_modes=failure_modes,
+            simulated_failure_modes=list(dict.fromkeys(failure_modes)),
             veto_reason=failure_modes[0] if failure_modes else None,
             step_predictions=step_predictions,
         )

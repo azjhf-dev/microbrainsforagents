@@ -148,8 +148,8 @@
   },
   "conformal_quantile": 0.027450859546661377,
   "per_class_quantiles": {
-    "patch_quality_rejected_high_risk": 0.027451,
-    "patch_quality_grade_a": 0.027421
+    "patch_quality_rejected_high_risk": 0.027450859546661377,
+    "patch_quality_grade_a": 0.02742093801498413
   },
   "per_class_counts": {
     "patch_quality_rejected_high_risk": 10,
@@ -187,5 +187,5 @@
   "weights_sha256": "1b91b2328a40679437befc2cdc0e1656ec3e414f28148d9931cf0ca4c626a698",
   "hopfield_rules_count": 34,
   "induction_heads": [],
-  "updated_at": 1794965900.3815594
+  "updated_at": 1794968127.487347
 }

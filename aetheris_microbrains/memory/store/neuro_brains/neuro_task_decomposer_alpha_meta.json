@@ -66,23 +66,44 @@
     "27": "decompose_objective_compound",
     "28": "task_graph_dag_built"
   },
-  "conformal_quantile": 0.05,
-  "per_class_quantiles": {},
-  "per_class_counts": {},
-  "conformal_alpha": 0.1,
+  "conformal_quantile": 0.012301743030548096,
+  "per_class_quantiles": {
+    "task_graph_dag_built": 0.012301743030548096
+  },
+  "per_class_counts": {
+    "task_graph_dag_built": 22
+  },
+  "conformal_alpha": 0.05,
   "conformal_scores": [
-    0.01,
-    0.02,
-    0.03,
-    0.04,
-    0.05
+    0.012301743030548096,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545,
+    0.012135684490203857,
+    0.012135684490203857,
+    0.012301623821258545
   ],
-  "n_calibration_samples": 5,
-  "coverage_std_error": 0.1134,
-  "conformal_guarantee_valid": false,
+  "n_calibration_samples": 22,
+  "coverage_std_error": 0.0445,
+  "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
-  "weights_sha256": "3b82cd77d8670452723429b81cfe46473b22bf906830b11a96e5d8a84a130058",
-  "hopfield_rules_count": 1,
+  "weights_sha256": "d54a8d1d88fca527eabedcd8253ab7cdb4ae9c1179498c410e9e990b8294436e",
+  "hopfield_rules_count": 24,
   "induction_heads": [],
-  "updated_at": 1794965900.5012372
+  "updated_at": 1794968130.1114767
 }

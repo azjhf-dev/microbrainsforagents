@@ -237,3 +237,20 @@ class MicroMoEOrchestrator:
         }
 
 
+def consult_microbrain(domain: str, tokens: List[str]) -> Dict[str, Any]:
+    """Direct domain inference + split-conformal check through AutonomousBrainNursery."""
+    nursery = AutonomousBrainNursery.get_instance()
+    brain = nursery._get_or_load_or_grow(domain)
+    fwd = brain.forward(tokens)
+    conf = brain.infer_conformal(tokens)
+    pred = fwd.get("predicted_token") or conf.get("predicted_token")
+    return {
+        **fwd,
+        "prediction": pred,
+        "prediction_set": conf.get("prediction_set", []),
+        "abstained": conf.get("abstained", False),
+        "conformal_guarantee_valid": conf.get("conformal_guarantee_valid", False),
+        "success": True,
+    }
+
+

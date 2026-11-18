@@ -427,7 +427,7 @@ class AnalyticalMicroTransformer:
             c_level = min(1.0, math.ceil((n_cls + 1) * (1.0 - float(alpha))) / float(n_cls))
             c_q = float(np.quantile(cls_vals, c_level))
             # Record per-class finite-sample quantile for Mondrian calibration
-            per_class_quantiles[cls_lbl] = round(float(c_q if n_cls >= 3 else max(q_hat, c_q)), 6)
+            per_class_quantiles[cls_lbl] = float(c_q if n_cls >= 3 else max(q_hat, c_q))
 
         min_required = max(1, math.ceil(1.0 / max(1e-6, float(alpha))) - 1)
         guarantee_valid = (not in_sample) and (n >= min_required)
@@ -515,7 +515,7 @@ class AnalyticalMicroTransformer:
 
         prediction_set = [
             tok for tok, p in sorted_probs
-            if (1.0 - p) <= _threshold_for(tok)
+            if (1.0 - p) <= (_threshold_for(tok) + 1e-7)
         ]
         top_tok, top_p = sorted_probs[0] if sorted_probs else ("<unk>", 0.0)
         set_size = len(prediction_set)

@@ -166,18 +166,23 @@ def calibrate_action_confidence(
             "Defer action to active Cascade Router / Supervisor review."
         )
 
-    # Consult Neural Microbrain
-    neural_sig = None
+    # Consult Neural Microbrain using structural input uncertainty features
+    neural_sig: Optional[str] = None
     try:
-        token = "regex_editing_overconfidence" if clean_domain == "regex_replace" else (
-            "git_lock_uncertainty" if clean_domain == "git_operations" else "verified_ast_high_conf"
-        )
+        cal_tokens = [
+            f"domain_{clean_domain}",
+            "low_familiarity" if float(context_familiarity) < 0.5 else "high_familiarity",
+            "elevated_epistemic" if epistemic >= 0.35 else "low_epistemic",
+        ]
         from .brain_moe_orchestrator import consult_microbrain
-        res = consult_microbrain("metacognitive_calibrator", [token])
-        if res:
-            neural_sig = res.get("prediction")
+        res = consult_microbrain("metacognitive_calibrator", cal_tokens)
+        if res and res.get("success", True):
+            neural_sig = res.get("prediction") or "module_no_prediction"
+        else:
+            neural_sig = "module_unavailable"
     except Exception as exc:
         log.debug("Metacognitive microbrain consultation skipped: %s", exc)
+        neural_sig = "module_unavailable"
 
     return CalibratedConfidence(
         domain=clean_domain,

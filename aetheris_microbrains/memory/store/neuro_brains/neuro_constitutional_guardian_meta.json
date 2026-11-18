@@ -150,10 +150,10 @@
   },
   "conformal_quantile": 0.02786862850189209,
   "per_class_quantiles": {
-    "violation_severity_blocked": 0.027833,
-    "violation_severity_none": 0.027827,
-    "violation_severity_fatal_quarantine": 0.027869,
-    "veto_unconditional": 0.027869
+    "violation_severity_blocked": 0.027833282947540283,
+    "violation_severity_none": 0.027827203273773193,
+    "violation_severity_fatal_quarantine": 0.02786862850189209,
+    "veto_unconditional": 0.02786862850189209
   },
   "per_class_counts": {
     "violation_severity_blocked": 8,
@@ -193,5 +193,5 @@
   "weights_sha256": "709cdb55358bd7c0e8ae76bfb54dd7cfa761f6ef9f3c5b656cffc97c968809d3",
   "hopfield_rules_count": 34,
   "induction_heads": [],
-  "updated_at": 1794965900.122797
+  "updated_at": 1794968127.401942
 }

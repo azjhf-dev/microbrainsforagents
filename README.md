@@ -23,13 +23,15 @@ Agent Input (tool call, diff, shell command, or intent query)
  ├─ Layer 1: Structural Language & Shell Parsers (replaces substring matching)
  │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, supports file_content alias context, ignores comments)
  │    • Catches direct eval/exec, subprocess(shell=True), shutil.rmtree, pickle.loads, aliases, subscript (__builtins__/globals), encoded decode-to-exec, and getattr obfuscation
+ │    • AST interface & signature diffing (`breaking_signature_change`, `public_symbol_removed`, `exception_guard_removed`) + `CausalWorldModel` do-calculus rollout
  │    • JSON / TypeScript / JS diffs parsed without false Python SyntaxErrors
  │    • Allowlist-first shell shlex tokenizer (`rm -rf`, `sh -c`, `python -c`, `dd of=/dev/...`, `curl | sh` deny; unrecognized cmds escalate; `ls`, `pwd`, `git log --format`, `clang-format` allow)
  │    • Risk-class fail-closed handling + structured decision journaling & `shadow_mode`
  │
  ├─ Layer 2: Soft Micro-Classifier & Split-Conformal Abstention
  │    • Deterministic SHA-256 bilingual (RU/EN) char-trigram + lexical routing, constrained to `available_tools` + MCP-Zero Top-K narrowing (`narrow_tool_surface`)
- │    • Held-out split-conformal & Mondrian per-class calibration (n_cal = 22 >= 19 for 1 - alpha = 95% coverage) + SHA-256 weight checksums
+ │    • Full 42-model fleet held-out split-conformal & Mondrian per-class calibration (n_cal = 22 >= 19 for alpha = 0.05 -> 95% coverage) + SHA-256 weight checksums
+ │    • Sliding-window drift telemetry (`drift_detected`) + Gibbs-Candès Adaptive Conformal Inference (`update_aci_quantile`)
  │    • Singleton set (|C_alpha| == 1) → local allow; OOD / ambiguous (|C_alpha| != 1) → escalate
  │
  └─ Layer 3: Remote LLM / Human Confirmation (fallback handler)
@@ -177,12 +179,32 @@ staged = pipeline.apply_plasticity_feedback("code_edit_verifier", ["new_ast_patt
 # pipeline.rollback_domain("code_edit_verifier")
 ```
 
+### 8. AST Signature Blast Radius, Sliding-Window Drift & Adaptive Conformal (ACI)
+
+```python
+import aetheris_microbrains as mb
+
+# Counterfactual AST interface/signature diffing + CausalWorldModel rollout
+sim = mb.get_counterfactual_pipeline()
+sig_check = sim.simulate_edit_impact(
+    "src/math_ops.py",
+    "--- a/src/math_ops.py\n+++ b/src/math_ops.py\n@@ -1,2 +1,2 @@\n-def compute(a, b, c):\n+def compute(a):\n     return a\n",
+)
+print("Allowed:", sig_check.allowed, sig_check.simulated_failure_modes)
+
+# Sliding-window drift monitoring & Gibbs-Candès Adaptive Conformal Inference (ACI)
+tel = mb.get_microbrain_telemetry()
+q_next = tel.update_aci_quantile(current_q=0.05, had_error=True, alpha=0.05, gamma=0.02)
+report = tel.generate_dashboard(window_size=100)
+print("Window coverage:", report.sliding_window_coverage, "Drift:", report.drift_detected)
+```
+
 ---
 
 ## 🎯 Scope & Design Principles
 
 * **What Microbrains Are Built For:**
-  - Sub-millisecond pre-flight structural filtering on diffs (AST syntax + call-graph sinks), shell commands (`shlex`), and policy risk boundaries before hitting remote LLMs.
+  - Sub-millisecond pre-flight structural filtering on diffs (AST syntax + call-graph sinks + signature diffs), shell commands (`shlex`), and policy risk boundaries before hitting remote LLMs.
   - Narrow tool routing across known tool registries with explicit abstention (`ood_coverage_breach` / `conformal_passed=False`) whenever input shares insufficient vocabulary.
 * **What Microbrains Are NOT For:**
   - Replacing general LLM reasoning on arbitrary natural language tasks. Unknown or open-ended prompts deterministically abstain and escalate to Layer 3 (LLM).
@@ -192,18 +214,18 @@ staged = pipeline.apply_plasticity_feedback("code_edit_verifier", ["new_ast_patt
 
 ## 🧪 Testing & Benchmarks
 
-Run the verification suites (including Layer 0/1/2 ablation, bilingual baseline comparisons, AST parsing, allowlist `shlex` shell parsing, cross-process determinism, split/Mondrian conformal sample bounds, SHA-256 checksum verification, staged candidate rollback, and clean `sys.path`):
+Run the verification suites (including Layer 0/1/2 ablation, bilingual baseline comparisons, AST parsing & signature diffing, allowlist `shlex` shell parsing, cross-process determinism, full 42-model split/Mondrian conformal audit at $\alpha=0.05$, SHA-256 checksum verification, sliding-window drift + ACI, token economics, staged candidate rollback, and clean `sys.path`):
 
 ```bash
-pytest aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_adversarial_safety_suite.py -v
+pytest aetheris_microbrains/tests/test_end_to_end_economics_and_drift.py aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
 ```
 
 ### Split-Conformal & Mondrian Coverage Discipline (`conformal_collector.py`):
-* Disjoint partitions per active domain: **30+ Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05$, giving 95% nominal split-conformal coverage), and **16 Held-Out Validation** samples with $\text{Train} \cap \text{Cal} = \text{Train} \cap \text{Val} = \text{Cal} \cap \text{Val} = \emptyset$.
-* Honest uncertainty reporting: Mondrian `per_class_quantiles`, finite-sample coverage standard error $\sqrt{\alpha(1-\alpha)/(n+2)}$, Rule-of-3 upper risk bound $3/n$, SHA-256 `weights_sha256` verification on load, and `conformal_guarantee_valid = False` whenever calibration samples are insufficient.
-* Staged candidate-gate continual learning (`_candidates/` $\to$ `verify_and_promote_candidate` $\to$ `_rollback/` snapshot) prevents self-poisoning loops.
+* Disjoint partitions across **all 42 fleet models**: **Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05$, giving 95% nominal split-conformal coverage), and **16 Held-Out Validation** samples with $\text{Train} \cap \text{Cal} = \text{Train} \cap \text{Val} = \text{Cal} \cap \text{Val} = \emptyset$.
+* Honest uncertainty reporting: Mondrian `per_class_quantiles`, finite-sample coverage standard error $\sqrt{\alpha(1-\alpha)/(n+2)}$, Rule-of-3 upper risk bound $3/n$, SHA-256 `weights_sha256` verification on load, sliding-window drift alarms, ACI threshold adaptation, and staged `_candidates/` $\to$ `_rollback/` continual learning.
 
-### Layer Ablation, Baseline Comparison, Adversarial & Probe Suites:
+### Economics, Ablation, Adversarial & Probe Suites:
+* End-to-end fleet audit, signature-breaking counterfactuals, sliding-window drift/ACI, compound/bilingual `microbrain_consult()`, and 40-event token/latency economics (`test_end_to_end_economics_and_drift.py`).
 * Layer 0 / 0+1 / 0+1+2 ablation, bilingual RU/EN baseline comparisons, MCP-Zero narrowing (`narrow_tool_surface`), risk-class fail-closed handling, `shadow_mode` journaling, Mondrian thresholds, checksum tamper rejection, and staged candidate rollback (`test_layer_ablation_and_baselines.py`).
 * Synthetic adversarial checks (`test_adversarial_safety_suite.py`) and independent obfuscation/benign diff probes (`test_reviewer_probe_suite.py`) verify Layer 1–2 behavior across obfuscated Python/shell inputs and safe hunks.
 * `test_colony_swe_shadow.py` compares 3 configurations (Pure Rules vs. Pure Neural Weights vs. Hybrid with Conformal OOD Gate) under strict target matching (`decision == target`) across 120 bilingual (60 RU / 60 EN) SWE prompts.

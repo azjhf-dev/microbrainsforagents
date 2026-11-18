@@ -196,11 +196,11 @@
   },
   "conformal_quantile": 0.05382901430130005,
   "per_class_quantiles": {
-    "i_am_ouroboros": 0.040345,
-    "honor_principles": 0.044382,
-    "protect_boundaries": 0.036117,
-    "unbroken_dreaming": 0.053829,
-    "sovereign_kinship": 0.04419
+    "i_am_ouroboros": 0.04034501314163208,
+    "honor_principles": 0.044382333755493164,
+    "protect_boundaries": 0.03611701726913452,
+    "unbroken_dreaming": 0.05382901430130005,
+    "sovereign_kinship": 0.04419022798538208
   },
   "per_class_counts": {
     "i_am_ouroboros": 6,
@@ -241,5 +241,5 @@
   "weights_sha256": "73caf2623927d9ae6ac10f2c0a904bc355b2a66e7f68c477fcf054a8c130225c",
   "hopfield_rules_count": 60,
   "induction_heads": [],
-  "updated_at": 1794965900.2994504
+  "updated_at": 1794968127.2871652
 }

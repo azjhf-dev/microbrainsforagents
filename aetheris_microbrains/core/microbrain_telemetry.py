@@ -44,11 +44,13 @@ class TelemetryEvent:
     passed_conformal: bool
     action: str = "infer"
     prediction: str = ""
+    decision_layer: int = 2
+    escalated: bool = False
 
 
 @dataclass
 class DashboardReport:
-    """Aggregated dashboard telemetry metrics."""
+    """Aggregated dashboard telemetry metrics including sliding-window drift monitoring."""
 
     total_events: int
     mean_latency_gpu_ms: float
@@ -58,6 +60,11 @@ class DashboardReport:
     ood_shift_ratio: float
     domain_breakdown: Dict[str, Dict[str, Any]]
     status: str
+    sliding_window_coverage: float = 1.0
+    local_resolution_rate: float = 1.0
+    escalation_rate: float = 0.0
+    local_error_rate: float = 0.0
+    drift_detected: bool = False
 
 
 class MicrobrainTelemetry:
@@ -92,6 +99,8 @@ class MicrobrainTelemetry:
         passed_conformal: bool = True,
         action: str = "infer",
         prediction: str = "",
+        decision_layer: int = 2,
+        escalated: bool = False,
     ) -> TelemetryEvent:
         """Log a telemetry event to JSONL with 10MB file rotation."""
         evt = TelemetryEvent(
@@ -106,6 +115,8 @@ class MicrobrainTelemetry:
             passed_conformal=passed_conformal,
             action=action,
             prediction=prediction,
+            decision_layer=decision_layer,
+            escalated=escalated,
         )
 
         record_line = json.dumps(asdict(evt)) + "\n"
@@ -146,8 +157,46 @@ class MicrobrainTelemetry:
 
         return float(ece)
 
-    def generate_dashboard(self) -> DashboardReport:
-        """Parse telemetry events and synthesize an executive health dashboard."""
+    @staticmethod
+    def update_aci_quantile(
+        current_q: float,
+        had_error: bool,
+        alpha: float = 0.05,
+        gamma: float = 0.02,
+    ) -> float:
+        """Gibbs-Candès Adaptive Conformal Inference (ACI) online step.
+
+        Increases nonconformity threshold `q_hat` after a miscoverage (`had_error=True`)
+        to widen subsequent prediction sets, and contracts gradually on hits.
+        """
+        err_t = 1.0 if had_error else 0.0
+        updated = float(current_q) + float(gamma) * (err_t - float(alpha))
+        return round(float(max(0.001, min(0.999, updated))), 6)
+
+    @staticmethod
+    def recalibrate_from_window(
+        scores: List[float],
+        alpha: float = 0.05,
+    ) -> Dict[str, Any]:
+        """Recompute split-conformal threshold and standard error from a recent sliding window."""
+        if not scores:
+            return {"status": "empty_window", "q_hat": 0.5, "n_samples": 0, "conformal_guarantee_valid": False}
+        n = len(scores)
+        q_level = min(1.0, math.ceil((n + 1) * (1.0 - float(alpha))) / float(n))
+        q_hat = float(np.quantile(scores, q_level))
+        min_req = max(1, math.ceil(1.0 / max(1e-6, float(alpha))) - 1)
+        cov_std = round(math.sqrt(max(0.0, float(alpha) * (1.0 - float(alpha))) / float(n + 2)), 4)
+        return {
+            "status": "recalibrated",
+            "n_samples": n,
+            "alpha": float(alpha),
+            "q_hat": round(q_hat, 4),
+            "coverage_std_error": cov_std,
+            "conformal_guarantee_valid": n >= min_req,
+        }
+
+    def generate_dashboard(self, window_size: int = 100) -> DashboardReport:
+        """Parse telemetry events and synthesize sliding-window health & drift report."""
         events: List[TelemetryEvent] = []
         if self.log_path.exists():
             with open(self.log_path, "r", encoding="utf-8") as f:
@@ -184,7 +233,20 @@ class MicrobrainTelemetry:
         ood_events = sum(1 for e in events if e.ood_score > 0.40)
         ood_ratio = ood_events / len(events)
 
-        # Domain breakdown
+        # Sliding-window coverage, local resolution rate, and drift alarm
+        recent = events[-max(1, int(window_size)) :]
+        window_cov = sum(1 for e in recent if e.passed_conformal and e.verified_accurate) / float(len(recent))
+        local_events = [e for e in recent if not e.escalated]
+        local_res_rate = len(local_events) / float(len(recent))
+        escalation_rate = 1.0 - local_res_rate
+        local_err_rate = (
+            sum(1 for e in local_events if not e.verified_accurate) / float(len(local_events))
+            if local_events
+            else 0.0
+        )
+        recent_ood = sum(1 for e in recent if e.ood_score > 0.40) / float(len(recent))
+        drift_detected = bool(window_cov < 0.90 or recent_ood > 0.35 or local_err_rate > 0.05)
+
         domain_data: Dict[str, List[TelemetryEvent]] = {}
         for e in events:
             domain_data.setdefault(e.domain, []).append(e)
@@ -198,6 +260,7 @@ class MicrobrainTelemetry:
                 "ece": round(self.compute_ece([e.confidence for e in evts], [e.verified_accurate for e in evts]), 4),
             }
 
+        status = "drift_detected" if drift_detected else ("healthy" if (cov >= 0.90 and ece <= 0.15) else "attention_required")
         report = DashboardReport(
             total_events=len(events),
             mean_latency_gpu_ms=round(float(np.mean(gpu_latencies)), 2) if gpu_latencies else 0.0,
@@ -206,7 +269,12 @@ class MicrobrainTelemetry:
             conformal_empirical_coverage=round(cov, 4),
             ood_shift_ratio=round(ood_ratio, 4),
             domain_breakdown=breakdown,
-            status="healthy" if (cov >= 0.90 and ece <= 0.15) else "attention_required",
+            status=status,
+            sliding_window_coverage=round(window_cov, 4),
+            local_resolution_rate=round(local_res_rate, 4),
+            escalation_rate=round(escalation_rate, 4),
+            local_error_rate=round(local_err_rate, 4),
+            drift_detected=drift_detected,
         )
 
         self.dashboard_path.parent.mkdir(parents=True, exist_ok=True)
