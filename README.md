@@ -7,7 +7,7 @@
 
 **Aetheris Microbrains** is a deterministic, layered local pre-filter and tool-routing library for autonomous LLM agents running in pure NumPy (with optional OpenCL acceleration).
 
-> **Architectural Honesty Note:** Microbrains are **not** SGD-trained deep LLMs. They are **analytically compiled Weight-Space associative matrices** paired with deterministic **Layer 0 policy rules**, **Layer 1 structural AST & `shlex` shell parsers**, and **Layer 2 split-conformal calibration** ($n_{\text{cal}} \ge 20$, $1 - \alpha = 95\%$) that abstain and escalate ambiguous or out-of-distribution (OOD) inputs to a remote LLM.
+> **Architectural Honesty Note (`v0.6.0`):** Microbrains are **not** SGD-trained deep LLMs. They are a **fast (`< 2 ms` p95 on CPU), deterministic 4-layer hybrid pre-flight safety & tool-routing library** built in pure NumPy: **Layer 0 policy & risk classes**, **Layer 1 real Python AST, secret-leak, and `shlex` shell parsers**, **Layer 2 analytically compiled Kuramoto-Hopfield / Attention matrices with SHA-256 routing and held-out split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$, $1 - \alpha = 95\%$, dynamic caller `alpha`), and **Layer 3 honest LLM / human escalation** (never silently approving abstained calls without an actual `llm_callback`).
 
 ---
 
@@ -20,21 +20,25 @@ Agent Input (tool call, diff, shell command, or intent query)
  │    • Read-only vs. Reversible Write vs. External vs. Irreversible Destructive
  │    • Protected paths (memory/bible.md, constitution/, etc.) ── veto → deny / escalate
  │
- ├─ Layer 1: Structural Language & Shell Parsers (replaces substring matching)
- │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, supports file_content alias context, ignores comments)
+ ├─ Layer 1: Structural Language, Secret & Shell Parsers (zero brittle substring hacks)
+ │    • Python AST visitor (dedents indented hunks, wraps except/elif fragments, resolves `file_content` enclosing aliases, ignores comments)
  │    • Catches direct eval/exec, subprocess(shell=True), shutil.rmtree, pickle.loads, aliases, subscript (__builtins__/globals), encoded decode-to-exec, and getattr obfuscation
+ │    • Hardcoded secret-leak detection (`secret_leak_pattern_found` on OpenAI/GitHub/AWS keys, PEM private keys, literal credential assignments)
  │    • AST interface & signature diffing (`breaking_signature_change`, `public_symbol_removed`, `exception_guard_removed`) + `CausalWorldModel` do-calculus rollout
- │    • JSON / TypeScript / JS diffs parsed without false Python SyntaxErrors
- │    • Allowlist-first shell shlex tokenizer (`rm -rf`, `sh -c`, `python -c`, `dd of=/dev/...`, `curl | sh` deny; unrecognized cmds escalate; `ls`, `pwd`, `git log --format`, `clang-format` allow)
+ │    • JSON / TypeScript / JS / YAML / Markdown diffs parsed without false Python SyntaxErrors
+ │    • Allowlist-first shell `shlex` tokenizer (`rm -rf`, `rm -fr`, `DROP DATABASE`, `sh -c`, `python -c`, `dd of=/dev/...`, `mkfs`, `curl | sh` deny; unrecognized cmds escalate; `ls`, `pwd`, `git log --format`, `clang-format` allow)
  │    • Risk-class fail-closed handling + structured decision journaling & `shadow_mode`
  │
- ├─ Layer 2: Soft Micro-Classifier & Split-Conformal Abstention
- │    • Deterministic SHA-256 bilingual (RU/EN) char-trigram + lexical routing, constrained to `available_tools` + MCP-Zero Top-K narrowing (`narrow_tool_surface`)
- │    • Full 42-model fleet held-out split-conformal & Mondrian per-class calibration (n_cal = 22 >= 19 for alpha = 0.05 -> 95% coverage) + SHA-256 weight checksums
+ ├─ Layer 2: Analytical Micro-Classifiers & Split-Conformal Abstention
+ │    • Deterministic SHA-256 bilingual (RU/EN) char-trigram + lexical routing (`ToolRoutingMoE`), constrained to `available_tools` + MCP-Zero Top-K narrowing (`narrow_tool_surface`, >=75% schema reduction)
+ │    • 42-model fleet calibrated at alpha=0.05 on n_cal=22 held-out samples (>= 19 required), Mondrian per-class quantiles, dynamic caller `alpha` recomputation, `W_embed_anchor`, and SHA-256 checksums (`allow_pickle=False`)
+ │    • Pickle-safe Weight-Space VSA (`weight_space_vsa.npz`) ranking nearest domains via actual Count-Sketch projected parameter weights
+ │    • Empirical Fisher diagonal EWC continual plasticity (`_candidates/` → leak-free holdout verification → `_rollback/`)
  │    • Sliding-window drift telemetry (`drift_detected`) + Gibbs-Candès Adaptive Conformal Inference (`update_aci_quantile`)
- │    • Singleton set (|C_alpha| == 1) → local allow; OOD / ambiguous (|C_alpha| != 1) → escalate
+ │    • Singleton set (|C_alpha| == 1) → local allow; OOD / ambiguous (|C_alpha| != 1 or token_coverage < 0.50) → escalate
  │
- └─ Layer 3: Remote LLM / Human Confirmation (fallback handler)
+ └─ Layer 3: Honest External LLM / Human Escalation
+      • Invokes caller-supplied `llm_callback` when escalated, or explicitly returns `ESCALATED_TO_LLM` (`llm_invoked=False`) rather than auto-authorizing without an LLM
 ```
 
 ---
@@ -212,23 +216,25 @@ print("Window coverage:", report.sliding_window_coverage, "Drift:", report.drift
 
 ---
 
-## 🧪 Testing & Benchmarks
+## 🧪 Testing & Benchmarks (`v0.6.0`: 17 Suites — 170 Passed, 5 OpenCL GPU Skipped)
 
-Run the verification suites (including Layer 0/1/2 ablation, bilingual baseline comparisons, AST parsing & signature diffing, allowlist `shlex` shell parsing, cross-process determinism, full 42-model split/Mondrian conformal audit at $\alpha=0.05$, SHA-256 checksum verification, sliding-window drift + ACI, token economics, staged candidate rollback, and clean `sys.path`):
+Run the full verification suite:
 
 ```bash
-pytest aetheris_microbrains/tests/test_end_to_end_economics_and_drift.py aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
+pytest aetheris_microbrains/tests -q
 ```
 
-### Split-Conformal & Mondrian Coverage Discipline (`conformal_collector.py`):
-* Disjoint partitions across **all 42 fleet models**: **Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05$, giving 95% nominal split-conformal coverage), and **16 Held-Out Validation** samples with $\text{Train} \cap \text{Cal} = \text{Train} \cap \text{Val} = \text{Cal} \cap \text{Val} = \emptyset$.
-* Honest uncertainty reporting: Mondrian `per_class_quantiles`, finite-sample coverage standard error $\sqrt{\alpha(1-\alpha)/(n+2)}$, Rule-of-3 upper risk bound $3/n$, SHA-256 `weights_sha256` verification on load, sliding-window drift alarms, ACI threshold adaptation, and staged `_candidates/` $\to$ `_rollback/` continual learning.
+Or target specific verification suites:
 
-### Economics, Ablation, Adversarial & Probe Suites:
-* End-to-end fleet audit, signature-breaking counterfactuals, sliding-window drift/ACI, compound/bilingual `microbrain_consult()`, and 40-event token/latency economics (`test_end_to_end_economics_and_drift.py`).
-* Layer 0 / 0+1 / 0+1+2 ablation, bilingual RU/EN baseline comparisons, MCP-Zero narrowing (`narrow_tool_surface`), risk-class fail-closed handling, `shadow_mode` journaling, Mondrian thresholds, checksum tamper rejection, and staged candidate rollback (`test_layer_ablation_and_baselines.py`).
-* Synthetic adversarial checks (`test_adversarial_safety_suite.py`) and independent obfuscation/benign diff probes (`test_reviewer_probe_suite.py`) verify Layer 1–2 behavior across obfuscated Python/shell inputs and safe hunks.
-* `test_colony_swe_shadow.py` compares 3 configurations (Pure Rules vs. Pure Neural Weights vs. Hybrid with Conformal OOD Gate) under strict target matching (`decision == target`) across 120 bilingual (60 RU / 60 EN) SWE prompts.
+```bash
+pytest aetheris_microbrains/tests/test_fable_review_fixes.py aetheris_microbrains/tests/test_reviewer_probe_suite.py aetheris_microbrains/tests/test_end_to_end_economics_and_drift.py aetheris_microbrains/tests/test_layer_ablation_and_baselines.py -v
+```
+
+### Independent Audit & Hardening Coverage:
+* **`test_fable_review_fixes.py`**: Pins persistent `W_embed_anchor` & empirical diagonal Fisher EWC regularization, weight-space similarity in `WeightSpaceVSA.find_nearest_domains()`, dynamic caller `alpha` conformal recomputation, honest `ESCALATED_TO_LLM` reporting when no `llm_callback` is supplied, hardcoded secret-leak detection (`secret_leak_pattern_found`), zero hardcoded OOD stems in `test_colony_swe_shadow.py`, and `allow_pickle=False` bundle loading.
+* **Split-Conformal & Mondrian Coverage Discipline (`conformal_collector.py`)**: Disjoint **Train**, **22 Held-Out Calibration** ($n_{\text{cal}} \ge 1/\alpha - 1 = 19$ for $\alpha = 0.05 \implies 95\%$ nominal coverage), and **16 Held-Out Validation** splits across **all 42 models** (86 shipped store files) with SHA-256 weight checksums, coverage standard error $\sqrt{\alpha(1-\alpha)/(n+2)}$, Rule-of-3 bound $3/n$, sliding-window drift detection, and Gibbs-Candès ACI adaptation.
+* **Ablation, Baselines & Economics (`test_layer_ablation_and_baselines.py`, `test_end_to_end_economics_and_drift.py`)**: Layer 0 / 0+1 / 0+1+2 ablation, bilingual RU/EN routing vs. English keyword baseline, MCP-Zero Top-$K$ schema reduction ($\ge 75\%$), `< 2 ms` p95 decision latency, risk-class fail-closed error handling, `shadow_mode` journaling, and `_candidates/` $\to$ `_rollback/` continual learning.
+* **Adversarial & Probe Suites (`test_reviewer_probe_suite.py`, `test_adversarial_safety_suite.py`, `test_colony_swe_shadow.py`)**: Obfuscated Python sinks, benign indented/try-except/comment/non-Python diffs, allowlist-first `shlex` shell parsing, and 120 bilingual (60 RU / 60 EN) SWE queries with conformal `token_coverage` OOD gating (`0/50` missed escalations).
 
 ---
 

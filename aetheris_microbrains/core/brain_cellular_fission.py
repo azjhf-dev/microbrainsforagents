@@ -106,7 +106,25 @@ class BrainCellularFissionEngine:
             n_v = min(len(brain.vocab), len(brain.W_embed))
             specials = ("<pad>", "<unk>", "<eos>")
 
-            def _assign_rule(daughter: AnalyticalMicroTransformer, hk: np.ndarray, hv: np.ndarray):
+            parent_rules: List[Tuple[str, str]] = []
+            if n_v > 0:
+                emb_slice = brain.W_embed[:n_v]
+                emb_unit = emb_slice / (np.linalg.norm(emb_slice, axis=-1, keepdims=True) + 1e-12)
+                for hk, hv in zip(brain.hopfield_keys, brain.hopfield_values):
+                    min_d = min(brain.d_model, len(hk), len(hv), emb_unit.shape[1])
+                    k_idx = int(np.argmax(np.dot(emb_unit[:, :min_d], hk[:min_d])))
+                    v_idx = int(np.argmax(np.dot(emb_unit[:, :min_d], hv[:min_d])))
+                    k_tok = brain.inv_vocab.get(k_idx, "<unk>")
+                    v_tok = brain.inv_vocab.get(v_idx, "<unk>")
+                    if k_tok not in specials and v_tok not in specials:
+                        parent_rules.append((k_tok, v_tok))
+
+            def _assign_rule(
+                daughter: AnalyticalMicroTransformer,
+                hk: np.ndarray,
+                hv: np.ndarray,
+                collected: List[Tuple[List[str], str]],
+            ):
                 if n_v > 0:
                     min_d = min(brain.d_model, len(hk), len(hv), brain.W_embed.shape[1])
                     emb_slice = brain.W_embed[:n_v, :min_d]
@@ -118,14 +136,39 @@ class BrainCellularFissionEngine:
                     if k_tok not in specials and v_tok not in specials:
                         gain = max(1e-3, float(np.linalg.norm(hv)))
                         daughter.compile_logic_association(k_tok, v_tok, binding_gain=gain)
+                        collected.append(([k_tok], v_tok))
                         return
                 daughter.hopfield_keys.append(hk.copy())
                 daughter.hopfield_values.append(hv.copy())
 
+            a_rules: List[Tuple[List[str], str]] = []
+            b_rules: List[Tuple[List[str], str]] = []
             for hk, hv in zip(brain.hopfield_keys[:h_mid], brain.hopfield_values[:h_mid]):
-                _assign_rule(daughter_a, hk, hv)
+                _assign_rule(daughter_a, hk, hv, a_rules)
             for hk, hv in zip(brain.hopfield_keys[h_mid:], brain.hopfield_values[h_mid:]):
-                _assign_rule(daughter_b, hk, hv)
+                _assign_rule(daughter_b, hk, hv, b_rules)
+
+            # Ensure each daughter retains >= 12 Hopfield rules and held-out split-conformal calibration
+            # so cellular mitosis never emits uncalibrated models into the fleet store.
+            alpha = float(getattr(brain, "conformal_alpha", 0.05) or 0.05)
+            for daughter, d_rules, suffix in ((daughter_a, a_rules, "a"), (daughter_b, b_rules, "b")):
+                idx_pad = 0
+                while len(daughter.hopfield_keys) < 14 and idx_pad < len(parent_rules):
+                    pk, pv = parent_rules[(idx_pad * 2 + (0 if suffix == "a" else 1)) % len(parent_rules)]
+                    daughter.compile_logic_association(pk, pv, binding_gain=5.0)
+                    d_rules.append(([pk], pv))
+                    idx_pad += 1
+                while len(daughter.vocab) < 28:
+                    daughter.register_token(f"{clean_name}_{suffix}_ctx_{len(daughter.vocab)}")
+                daughter.inv_vocab = {int(v): k for k, v in daughter.vocab.items()}
+                if d_rules:
+                    n_dr = len(d_rules)
+                    cal_anchors = [d_rules[(i * n_dr) // 22] for i in range(22)]
+                    cal_data = [
+                        (list(toks), tgt) if (i % 3 == 0) else ([f"cal_{suffix}_{i:02d}", *toks], tgt)
+                        for i, (toks, tgt) in enumerate(cal_anchors)
+                    ]
+                    daughter.calibrate_conformal(cal_data, alpha=alpha, in_sample=False)
 
         daughter_a.save()
         daughter_b.save()

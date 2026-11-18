@@ -180,10 +180,10 @@
   "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
-  "weights_sha256": "16651d2be6970cc524e05439937516857a5131b4fa021f883bc648c90a18ff27",
+  "weights_sha256": "a6a56347b7ac3aa94ea7bbc9dd5101e10208923f6c6461b0e37746d035f0a394",
   "hopfield_rules_count": 32,
   "induction_heads": [
     0
   ],
-  "updated_at": 1794968128.1010177
+  "updated_at": 1794969606.8879457
 }

@@ -478,6 +478,38 @@ def _detect_interface_hazards(raw_lines: List[str], tree_new: ast.AST) -> List[s
     return list(dict.fromkeys(hazards))
 
 
+_SECRET_TOKEN_REGEXES: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    re.compile(r"-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+|DSA\s+)?PRIVATE\s+KEY-----"),
+)
+_SECRET_ASSIGN_RE = re.compile(
+    r"""(?i)\b(?:api_key|secret_key|private_key|access_token|auth_token|client_secret|password|passwd)\b\s*[:=]\s*["']([A-Za-z0-9_\-./+=]{12,})["']"""
+)
+_SECRET_PLACEHOLDER_MARKERS: Tuple[str, ...] = (
+    "example", "placeholder", "changeme", "your_", "dummy", "test", "xxx", "***", "<your"
+)
+
+
+def _detect_secret_leaks(lines: Sequence[str]) -> List[str]:
+    """Detect hardcoded API tokens, PEM private keys, and literal credential assignments."""
+    for ln in lines:
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        for pat in _SECRET_TOKEN_REGEXES:
+            if pat.search(stripped):
+                return ["secret_leak_pattern_found"]
+        match = _SECRET_ASSIGN_RE.search(stripped)
+        if match:
+            val_lower = match.group(1).lower()
+            if not any(marker in val_lower for marker in _SECRET_PLACEHOLDER_MARKERS):
+                return ["secret_leak_pattern_found"]
+    return []
+
+
 def analyze_code_diff(
     file_path: Optional[str],
     diff_text: Optional[str],
@@ -526,6 +558,11 @@ def analyze_code_diff(
             extracted = diff_text
 
     dedented = textwrap.dedent(extracted).strip("\n")
+    if has_unified:
+        secret_scan_lines = [l[1:] for l in raw_lines if l.startswith("+") and not l.startswith("+++")]
+    else:
+        secret_scan_lines = dedented.splitlines()
+    secret_findings = _detect_secret_leaks(secret_scan_lines)
 
     # Non-Python files: skip Python ast.parse and validate format appropriately
     if ext == ".json":
@@ -534,11 +571,12 @@ def analyze_code_diff(
             json_ok = True
         except Exception:
             json_ok = ('"' in dedented and ":" in dedented) or dedented.strip().startswith(("{", "["))
+        findings = ([] if json_ok else ["malformed_json_hunk"]) + secret_findings
         return {
             "language": "json",
             "syntax_valid": json_ok,
-            "security_clean": True,
-            "findings": [] if json_ok else ["malformed_json_hunk"],
+            "security_clean": len(secret_findings) == 0,
+            "findings": list(dict.fromkeys(findings)),
             "interface_hazards": [],
             "line_count": line_count,
             "ast_nodes": [],
@@ -546,13 +584,14 @@ def analyze_code_diff(
         }
 
     if ext in {".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".md", ".yaml", ".yml", ".toml", ".txt", ".c", ".cpp", ".h", ".rs", ".go"}:
-        non_py_findings: List[str] = []
+        non_py_findings: List[str] = list(secret_findings)
         for ln in dedented.splitlines():
             stripped = ln.strip()
             if stripped.startswith(("//", "#", "/*", "*")):
                 continue
             if re.search(r"\beval\s*\(", stripped) and ext in {".js", ".ts", ".jsx", ".tsx"}:
                 non_py_findings.append("js_eval_call")
+        non_py_findings = list(dict.fromkeys(non_py_findings))
         return {
             "language": ext.lstrip(".") or "text",
             "syntax_valid": True,
@@ -603,6 +642,7 @@ def analyze_code_diff(
         visitor.decoded_vars.update(seed_visitor.decoded_vars)
     visitor.visit(tree)
 
+    all_findings = list(dict.fromkeys(list(visitor.findings) + secret_findings))
     interface_hazards = _detect_interface_hazards(raw_lines, tree) if has_unified else []
 
     ast_nodes: List[str] = []
@@ -617,8 +657,8 @@ def analyze_code_diff(
     return {
         "language": "python",
         "syntax_valid": True,
-        "security_clean": len(visitor.findings) == 0,
-        "findings": list(dict.fromkeys(visitor.findings)),
+        "security_clean": len(all_findings) == 0,
+        "findings": all_findings,
         "interface_hazards": interface_hazards,
         "line_count": line_count,
         "ast_nodes": list(dict.fromkeys(ast_nodes)),
@@ -793,6 +833,7 @@ def analyze_shell_command(cmd_str: Optional[str]) -> Dict[str, Any]:
                 or a.startswith("~/")
                 or a.startswith("/dev/")
                 or a.startswith("/etc")
+                or (a.startswith("/") and len([seg for seg in a.split("/") if seg]) <= 2)
                 or ".." in a.replace("\\", "/").split("/")
                 for a in args_lower
                 if not a.startswith("-")

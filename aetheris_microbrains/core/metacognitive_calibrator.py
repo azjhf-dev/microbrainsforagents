@@ -115,8 +115,8 @@ def calibrate_action_confidence(
     logit_prior = math.log(prior_clamped / (1.0 - prior_clamped))
     logit_raw = math.log(raw / (1.0 - raw))
     
-    # Balance scaling: temperature scales raw confidence; prior and epistemic apply smooth shifts
-    logit_adj = (logit_raw / max(0.1, temp)) + (0.5 * logit_prior) - (0.8 * epistemic)
+    # Balance scaling: temperature scales raw confidence; prior, epistemic, and aleatoric apply smooth shifts
+    logit_adj = (logit_raw / max(0.1, temp)) + (0.5 * logit_prior) - (1.2 * epistemic) - (0.8 * aleatoric)
     # Sigmoidal reconstruction guarantees calibrated in (0, 1) and full reachability to 1.0 as raw -> 1.0
     calibrated = 1.0 / (1.0 + math.exp(-logit_adj))
     calibrated = max(0.01, min(0.99, calibrated))
@@ -141,7 +141,7 @@ def calibrate_action_confidence(
     conformal_set: List[str] = []
     if (1.0 - calibrated) <= q_hat:
         conformal_set.append("proceed_direct")
-    if calibrated >= 0.35 and (1.0 - calibrated) <= (q_hat + 0.30):
+    if (1.0 - calibrated) > q_hat and calibrated >= 0.35 and (1.0 - calibrated) <= (q_hat + 0.55):
         conformal_set.append("verify_syntax")
     if not conformal_set or calibrated < 0.50:
         conformal_set.append("sandbox_isolate")

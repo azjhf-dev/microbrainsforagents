@@ -228,9 +228,14 @@ class CriticalEnsemble:
         diff_analysis = analyze_code_diff(path_str, payload_diff)
         syntax_clean = bool(diff_analysis["syntax_valid"])
         security_clean = bool(diff_analysis["security_clean"])
+        diff_findings = diff_analysis.get("findings", [])
+        interface_hazards = diff_analysis.get("interface_hazards", [])
+        has_secret_leak = "secret_leak_pattern_found" in diff_findings
 
         if not syntax_clean:
             ast_tokens = ["syntax_tree_malformed", "ast_node_try_except"]
+        elif has_secret_leak:
+            ast_tokens = ["ast_node_call", "secret_leak_pattern_found"]
         elif not security_clean:
             ast_tokens = ["ast_node_call", "side_effect_subprocess_spawn"]
         else:
@@ -278,7 +283,7 @@ class CriticalEnsemble:
         predictor = self._get_model("neuro_patch_quality_predictor")
         diff_lines = len(payload_diff.splitlines()) if payload_diff else 0
 
-        if diff_lines > 500:
+        if diff_lines > 500 or interface_hazards:
             p_tokens = ["diff_lines_massive_five_hundred", "breaking_change_signature_detected"]
         elif diff_lines > 50:
             p_tokens = ["diff_lines_sub_two_hundred", "backward_compatibility_preserved"]
@@ -306,6 +311,7 @@ class CriticalEnsemble:
             p_nonconf = round(1.0 - p_conf, 4) if p_verdict == "ALLOW" else round(p_conf, 4)
             p_details = {
                 "diff_lines": diff_lines,
+                "interface_hazards": interface_hazards,
                 "tokens": p_tokens,
                 "predicted_token": p_pred,
                 "prediction_set": p_res.get("prediction_set", []),
@@ -329,7 +335,12 @@ class CriticalEnsemble:
             is_destructive_shell = not shell_res["is_safe"]
         else:
             is_destructive_shell = False
-        tf_tokens = ["suki_class_boundary", "failure_fatal_circuit_breaker"] if is_destructive_shell else ["failure_severity_benign", "action_inspect_stack_trace"]
+        if is_destructive_shell:
+            tf_tokens = ["suki_class_boundary", "failure_fatal_circuit_breaker"]
+        elif payload_diff and (not syntax_clean or not security_clean):
+            tf_tokens = ["suki_class_syntax", "failure_fatal_circuit_breaker"]
+        else:
+            tf_tokens = ["failure_severity_benign", "action_inspect_stack_trace"]
 
         if classifier is None:
             tf_verdict = "ABSTAIN"
@@ -423,8 +434,13 @@ class CriticalEnsemble:
         action_name: str,
         target_path: Optional[str] = None,
         payload_diff: Optional[str] = None,
+        llm_callback: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Full lifecycle evaluation: Critical Microbrain Ensemble -> LLM Cascade Router escalation."""
+        """Full lifecycle evaluation: Critical Microbrain Ensemble -> Cascade / External LLM escalation.
+
+        Never fabricates `AUTHORIZED` or `llm_invoked=True` when the ensemble abstained
+        and no `llm_callback` was supplied.
+        """
         consensus = self.evaluate_critical_action(action_name, target_path, payload_diff)
         if consensus.status == "CONSENSUS_APPROVED":
             return {
@@ -441,7 +457,6 @@ class CriticalEnsemble:
                 "llm_invoked": False,
             }
         else:
-            # Escalated to LLM Cascade Router
             from .cascade_ensemble import get_cascade_ensemble_router
             router = get_cascade_ensemble_router()
             cascade_res = router.evaluate_action_pipeline(
@@ -449,12 +464,37 @@ class CriticalEnsemble:
                 target_tool=action_name,
                 tool_args={"path": target_path, "diff": payload_diff, "cmd": target_path},
             )
+            if cascade_res.verdict in ("BLOCKED_CONSTITUTIONAL", "BLOCKED_PRECONDITION_SUKI"):
+                return {
+                    "final_verdict": cascade_res.verdict,
+                    "tier": "CASCADE_REJECTION",
+                    "consensus_result": consensus,
+                    "cascade_verdict": cascade_res,
+                    "llm_invoked": False,
+                }
+            if llm_callback is not None:
+                llm_out = llm_callback({
+                    "action_name": action_name,
+                    "target_path": target_path,
+                    "consensus_result": consensus.to_dict(),
+                    "cascade_verdict": cascade_res.to_dict(),
+                })
+                final_v = llm_out.get("verdict", "ESCALATED_TO_LLM") if isinstance(llm_out, dict) else str(llm_out)
+                return {
+                    "final_verdict": final_v,
+                    "tier": "LLM_CASCADE_ESCALATION",
+                    "consensus_result": consensus,
+                    "cascade_verdict": cascade_res,
+                    "llm_response": llm_out,
+                    "llm_invoked": True,
+                }
             return {
-                "final_verdict": cascade_res.verdict,
+                "final_verdict": "ESCALATED_TO_LLM",
                 "tier": "LLM_CASCADE_ESCALATION",
                 "consensus_result": consensus,
                 "cascade_verdict": cascade_res,
-                "llm_invoked": True,
+                "llm_invoked": False,
+                "requires_external_llm": True,
             }
 
 

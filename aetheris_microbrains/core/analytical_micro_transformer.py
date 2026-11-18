@@ -86,6 +86,7 @@ class AnalyticalMicroTransformer:
         self.inv_vocab: Dict[int, str] = {0: "<pad>", 1: "<unk>", 2: "<eos>"}
         self.W_embed = np.zeros((d_model, d_model), dtype=np.float32)
         self._init_orthogonal_embeddings()
+        self.W_embed_anchor = self.W_embed.copy()
 
         # 4. Proposal 8: Collision-Free Modern Hopfield Associative Memory & Kuramoto Phase Bank
         self.hopfield_keys: List[np.ndarray] = []
@@ -122,6 +123,11 @@ class AnalyticalMicroTransformer:
                 extra = rng.standard_normal((32, self.d_model)).astype(np.float32)
                 extra /= (np.linalg.norm(extra, axis=-1, keepdims=True) + 1e-12)
                 self.W_embed = np.vstack([self.W_embed, extra]).astype(np.float32)
+                anchor_base = getattr(self, "W_embed_anchor", None)
+                if isinstance(anchor_base, np.ndarray) and anchor_base.shape[1] == self.d_model:
+                    self.W_embed_anchor = np.vstack([anchor_base, extra]).astype(np.float32)
+                else:
+                    self.W_embed_anchor = self.W_embed.copy()
             self.vocab[token] = idx
             self.inv_vocab[idx] = token
             return idx
@@ -472,8 +478,17 @@ class AnalyticalMicroTransformer:
         When `mondrian is None`, applies class-conditional thresholds only for classes with
         n_cls >= min_required (where the per-class finite-sample quantile is defined).
         """
+        effective_alpha = float(alpha) if alpha is not None else float(self.conformal_alpha or 0.05)
+        alpha_changed = False
         q_hat = self.conformal_quantile
         uncalibrated = q_hat is None
+        if q_hat is not None and alpha is not None and self.conformal_scores:
+            stored_alpha = float(self.conformal_alpha or 0.05)
+            if abs(effective_alpha - stored_alpha) > 1e-6:
+                n_scores = len(self.conformal_scores)
+                q_level = min(1.0, math.ceil((n_scores + 1) * (1.0 - effective_alpha)) / float(n_scores))
+                q_hat = float(np.quantile(self.conformal_scores, q_level))
+                alpha_changed = True
         if q_hat is None:
             if self.hopfield_keys:
                 auto_cal: List[Tuple[List[str], str]] = []
@@ -498,10 +513,13 @@ class AnalyticalMicroTransformer:
         probs = self.get_token_probabilities(input_tokens)
         sorted_probs = sorted(probs.items(), key=lambda kv: (-kv[1], str(kv[0])))
 
-        effective_alpha = float(alpha) if alpha is not None else self.conformal_alpha
         n_cal = getattr(self, "n_calibration_samples", len(self.conformal_scores))
         min_req = max(1, math.ceil(1.0 / max(1e-6, effective_alpha)) - 1)
-        mondrian_map = self.per_class_quantiles if (not uncalibrated and self.per_class_quantiles) else {}
+        mondrian_map = (
+            self.per_class_quantiles
+            if (not uncalibrated and not alpha_changed and self.per_class_quantiles)
+            else {}
+        )
         cls_counts = getattr(self, "per_class_counts", {}) or {}
 
         def _threshold_for(tok: str) -> float:
@@ -578,6 +596,7 @@ class AnalyticalMicroTransformer:
             "W_Q": self.W_Q, "W_K": self.W_K, "W_V": self.W_V, "W_O": self.W_O,
             "W_up": self.W_up, "W_down": self.W_down, "b_up": self.b_up, "b_down": self.b_down,
             "W_embed": self.W_embed,
+            "W_embed_anchor": getattr(self, "W_embed_anchor", self.W_embed),
         }
         if isinstance(self.W_mlp, np.ndarray):
             arrays["W_mlp"] = self.W_mlp
@@ -683,7 +702,7 @@ class AnalyticalMicroTransformer:
                 d_mlp=meta["d_mlp"],
                 max_seq_len=meta["max_seq_len"],
             )
-            with np.load(weights_file) as data:
+            with np.load(weights_file, allow_pickle=False) as data:
                 obj.W_Q = data["W_Q"]
                 obj.W_K = data["W_K"]
                 obj.W_V = data["W_V"]
@@ -695,6 +714,10 @@ class AnalyticalMicroTransformer:
                 if "W_mlp" in data:
                     obj.W_mlp = data["W_mlp"]
                 obj.W_embed = data["W_embed"]
+                if "W_embed_anchor" in data:
+                    obj.W_embed_anchor = data["W_embed_anchor"].copy()
+                else:
+                    obj.W_embed_anchor = obj.W_embed.copy()
                 if "hopfield_keys" in data:
                     hk = data["hopfield_keys"]
                     hv = data["hopfield_values"]

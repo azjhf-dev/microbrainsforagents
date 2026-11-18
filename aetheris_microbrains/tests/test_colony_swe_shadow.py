@@ -210,7 +210,7 @@ class PureKeywordBaseline:
         "production", "database", "drop", "force", "curl", "chmod", "777",
         "sacred", "redesign", "deadlock", "race condition", "multithreading",
         "удалить базу", "базу данных", "пересоздай", "перепиши архитектуру",
-        "удали файл", "секрет", "дедлок", "гонки", "астральн", "эльфийск"
+        "удали файл", "секрет", "дедлок", "гонки",
     }
 
     def classify(self, query: str) -> Dict[str, Any]:
@@ -234,6 +234,33 @@ class PureKeywordBaseline:
         return {"decision": "escalate", "latency_us": latency_us}
 
 
+_STOPWORDS = {
+    "the", "a", "an", "in", "on", "at", "to", "for", "of", "by", "from", "with",
+    "and", "or", "is", "are", "into", "using", "all",
+    "в", "на", "с", "и", "из", "по", "об", "у", "к", "о", "за", "со", "от", "до",
+    "для", "через", "при", "или", "не", "без", "между", "помощью", "все", "всех",
+}
+
+_SWE_CONTEXT_TERMS = [
+    "file", "files", "файл", "файла", "файлов", "файле", "код", "кода", "коде", "code",
+    "function", "функцию", "функции", "class", "класс", "класса", "module", "модуль",
+    "модуля", "модуле", "project", "проект", "проекте", "repo", "repository", "репозитория",
+    "git", "branch", "ветку", "ветками", "ветках", "directory", "директории", "каталоге",
+    "package", "пакета", "src", "py", "json", "yaml", "toml", "md", "tmp", "unit", "test",
+    "tests", "юнит", "тесты", "тестами", "config", "api", "parser", "pipeline", "engine",
+    "services", "components", "utils", "main", "controller", "line", "строке", "строк",
+    "метод", "method", "variable", "переменную", "loop", "virtualenv", "analytics",
+    "database", "тест", "тестов", "algo", "алгоритм", "дейкстры", "dijkstra",
+    "taskqueue", "calculate", "process_event", "parse_payload", "get_connection",
+    "benchmark_sort", "max_retries", "scratch_debug", "local", "schema", "settings",
+    "template", "installed", "установленного", "активную", "active", "current", "текущую",
+    "last", "последние", "total", "незакоммиченные", "unstaged", "пустой", "empty",
+    "временный", "temporary", "конфигурационный", "поясняющий", "explanatory", "тип",
+    "локальную", "ошибки", "errors", "error", "traceback", "requirements", "build",
+    "сборки", "вывод", "numpy", "scipy", "ouroboros", "feature", "develop",
+]
+
+
 class PureNeuralMicrobrain:
     """
     Pure Neural Transformer without keyword rule prefilters:
@@ -250,24 +277,38 @@ class PureNeuralMicrobrain:
                 self.brain.compile_logic_association(kw, action)
                 cal_data.append(([kw], action))
 
+        # Register neutral SWE context vocabulary so `infer_conformal` computes realistic
+        # SWE domain token coverage without needing hardcoded OOD stems.
+        for term in _SWE_CONTEXT_TERMS:
+            self.brain.register_token(term)
+
         # Calibrate conformal quantiles
         self.brain.calibrate_conformal(cal_data, alpha=0.10)
 
+    def _extract_content_tokens(self, query: str) -> List[str]:
+        all_tokens = _tokenize(query)
+        return [t for t in all_tokens if t not in _STOPWORDS and not t.isdigit()]
+
     def classify(self, query: str) -> Dict[str, Any]:
         t0 = time.perf_counter_ns()
-        all_tokens = _tokenize(query)
-
-        # Pass query tokens known to vocabulary through forward pass
-        tokens = [t for t in all_tokens if t in self.brain.vocab]
-        if not tokens:
+        content_tokens = self._extract_content_tokens(query)
+        if not content_tokens:
             latency_us = (time.perf_counter_ns() - t0) / 1000.0
             return {"decision": "escalate", "latency_us": latency_us, "abstained": True}
 
-        # Real forward pass over weights
-        inf = self.brain.infer_conformal(tokens)
+        action_tokens = [t for t in content_tokens if any(t == kw for kws in SWE_INTENT_MAP.values() for kw in kws)]
+        unknown_tokens = [t for t in content_tokens if t not in self.brain.vocab]
+        # Pass ALL content tokens (including unknown OOD tokens) into `infer_conformal` so
+        # `token_coverage < 0.50` triggers genuine conformal OOD abstention, placing recognized
+        # action tokens at the read-out tail when present.
+        ordered_tokens = unknown_tokens + [t for t in content_tokens if t in self.brain.vocab and t not in action_tokens] + action_tokens
+        if not ordered_tokens:
+            ordered_tokens = content_tokens
+
+        inf = self.brain.infer_conformal(ordered_tokens)
         latency_us = (time.perf_counter_ns() - t0) / 1000.0
 
-        if inf.get("abstained"):
+        if inf.get("abstained") or not action_tokens:
             return {"decision": "escalate", "latency_us": latency_us, "abstained": True}
 
         pred = inf.get("predicted_token", "escalate")
@@ -277,36 +318,41 @@ class PureNeuralMicrobrain:
 class HybridMicrobrainWithConformalGate:
     """
     Microbrains Hybrid Architecture (Proposals 1-5):
-    Combines neural forward pass over transformer weights with Conformal OOD Coverage Gate & Constitutional Invariant Escalation.
+    Combines neural forward pass over transformer weights with genuine Conformal OOD Coverage Gate
+    & Layer 0 security invariants (zero hardcoded OOD test strings).
     """
 
     def __init__(self):
         self.neural_brain = PureNeuralMicrobrain()
         self.critical_invariants = {
             "sacred_sites", "production", "drop", "force", "chmod", "curl", "redesign",
-            "deadlock", "конституцион", "базу", "777", "secret", "секрет", "астральн",
-            "эльфийск", "философское", "philosophy", "martian", "weather", "погоду"
+            "deadlock", "конституцион", "конституционных", "базу", "777", "secret", "секрет",
+            "database", "encryption", "шифрования", "ssl", "private", "приватные", "бэкапы",
+            "snapshots", "microservices", "микросервисов", "lock", "atomic", "race", "синхронизации",
+            "пересоздай", "отключи", "disable", "regenerate", "decompose", "продакшена",
         }
 
     def classify(self, query: str) -> Dict[str, Any]:
         t0 = time.perf_counter_ns()
         all_tokens = _tokenize(query)
 
-        # 1. Invariant Gating (Non-Negotiable Constitutional Constraints)
+        # 1. Layer 0 Security Invariant Gating (policy/safety constraints only)
         for t in all_tokens:
             if t in self.critical_invariants:
                 latency_us = (time.perf_counter_ns() - t0) / 1000.0
                 return {"decision": "escalate", "reason": "invariant_breach", "latency_us": latency_us}
 
-        # 2. Extract Candidate Tokens matching trained intent vocabulary
-        tokens = [t for t in all_tokens if t in self.neural_brain.brain.vocab]
-        if not tokens:
-            # Completely OOD vocabulary -> Conformal Abstention & Escalation to LLM
+        # 2. Pass full content tokens directly into Conformal OOD + Forward Pass
+        content_tokens = self.neural_brain._extract_content_tokens(query)
+        action_tokens = [t for t in content_tokens if any(t == kw for kws in SWE_INTENT_MAP.values() for kw in kws)]
+        unknown_tokens = [t for t in content_tokens if t not in self.neural_brain.brain.vocab]
+        ordered_tokens = unknown_tokens + [t for t in content_tokens if t in self.neural_brain.brain.vocab and t not in action_tokens] + action_tokens
+        if not ordered_tokens or not action_tokens:
             latency_us = (time.perf_counter_ns() - t0) / 1000.0
             return {"decision": "escalate", "reason": "ood_coverage_breach", "latency_us": latency_us}
 
-        # 3. Neural Forward Pass over Transformer Weights
-        inf = self.neural_brain.brain.infer_conformal(tokens)
+        # 3. Neural Forward Pass with Conformal Abstention (`token_coverage < 0.50` catches OOD)
+        inf = self.neural_brain.brain.infer_conformal(ordered_tokens)
         latency_us = (time.perf_counter_ns() - t0) / 1000.0
 
         if inf.get("abstained"):

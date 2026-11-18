@@ -73,7 +73,7 @@ class AutotelicVoidExplorer:
         brain_files = sorted(list(target_dir.glob("*.npz")) + list(target_dir.glob("*.npy")))
         for p in brain_files:
             try:
-                loaded = np.load(p, allow_pickle=True)
+                loaded = np.load(p, allow_pickle=False)
                 if isinstance(loaded, np.lib.npyio.NpzFile):
                     # For npz archives, extract concatenated weight matrices or primary W_embed/W_mlp
                     arrays = [loaded[k] for k in loaded.files if isinstance(loaded[k], np.ndarray) and loaded[k].size > 0]

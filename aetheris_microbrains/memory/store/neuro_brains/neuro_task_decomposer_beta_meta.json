@@ -104,8 +104,8 @@
   "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
-  "weights_sha256": "19bcc6bfaf99ff966170bfbbb13a24f6ea111a32e33c125759fe5a30e3ef805b",
+  "weights_sha256": "d987b50d364e0bba9cd81a4a6478e2a8c57b48ef5aa33603be4971c86258853b",
   "hopfield_rules_count": 24,
   "induction_heads": [],
-  "updated_at": 1794968130.160221
+  "updated_at": 1794969608.6569343
 }

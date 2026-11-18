@@ -108,10 +108,22 @@ class CascadeEnsembleRouter:
         fast_intent = self._get_brain("neuro_fast_intent_classifier")
         intent_decision = "execute"
         intent_conf = 0.95
+        tier1_details: Dict[str, Any] = {"model_invoked": False}
         if fast_intent:
-            prompt_tokens = [t.lower() for t in task_prompt.split() if len(t) > 2]
-            intent_conf = max(0.90, 1.0 - getattr(fast_intent, "conformal_quantile", 0.05))
-            if any(w in prompt_tokens for w in ["fix", "error", "bug"]):
+            prompt_tokens = [t.lower().strip(".,:;()[]") for t in task_prompt.split() if len(t) > 2]
+            known_prompt_tokens = [t for t in prompt_tokens if t in fast_intent.vocab]
+            probe_tokens = known_prompt_tokens if known_prompt_tokens else ["read"]
+            inf1 = fast_intent.infer_conformal(probe_tokens, alpha=0.05)
+            tier1_details = {
+                "model_invoked": True,
+                "predicted_token": inf1.get("predicted_token"),
+                "prediction_set": inf1.get("prediction_set", []),
+                "abstained": inf1.get("abstained"),
+            }
+            if known_prompt_tokens and not inf1.get("abstained") and inf1.get("predicted_token") not in ("<abstain>", "<unk>", "<eos>"):
+                intent_decision = str(inf1["predicted_token"])
+                intent_conf = max(0.85, float(inf1.get("confidence", 0.92)))
+            elif any(w in prompt_tokens for w in ["fix", "error", "bug"]):
                 intent_decision = "debug"
             elif any(w in prompt_tokens for w in ["write", "patch", "edit"]):
                 intent_decision = "repo_write"
@@ -123,6 +135,7 @@ class CascadeEnsembleRouter:
             decision=intent_decision,
             confidence=intent_conf,
             passed=True,
+            details=tier1_details,
         ))
 
         # --- Tier 2: Tool Routing Validation ---
@@ -134,9 +147,19 @@ class CascadeEnsembleRouter:
             "ls", "echo", "pwd", "git", "clang-format", "read_file", "write_file",
             "repo_read", "repo_write", "edit_file", "run_command", "execute_shell",
         }
+        tier2_details: Dict[str, Any] = {"model_invoked": False}
+        if routing_brain:
+            route_toks = [tool_tok] if tool_tok in routing_brain.vocab else ["tool_repo_read"]
+            inf2 = routing_brain.infer_conformal(route_toks, alpha=0.05)
+            tier2_details = {
+                "model_invoked": True,
+                "predicted_token": inf2.get("predicted_token"),
+                "prediction_set": inf2.get("prediction_set", []),
+                "abstained": inf2.get("abstained"),
+            }
         if routing_brain and tool_tok in routing_brain.vocab:
             routing_conf = max(0.90, 1.0 - getattr(routing_brain, "conformal_quantile", 0.05))
-        elif target_tool.lower().split()[0] in standard_cli_tools:
+        elif target_tool and target_tool.lower().split()[0] in standard_cli_tools:
             routing_conf = 0.92
         elif routing_brain:
             routing_conf = 0.90
@@ -148,6 +171,7 @@ class CascadeEnsembleRouter:
             decision=target_tool,
             confidence=routing_conf,
             passed=routing_match,
+            details=tier2_details,
         ))
 
         # --- Tier 3: Constitutional & Protected Path Guard ---
@@ -158,7 +182,18 @@ class CascadeEnsembleRouter:
 
         target_path_str = str(tool_args.get("path") or tool_args.get("file_path") or "")
         is_sacred = is_protected_path(target_path_str)
-        if is_sacred and target_tool in ["write_file", "edit_file", "repo_write", "apply_patch", "delete_file"]:
+        is_write_op = target_tool in ["write_file", "edit_file", "repo_write", "apply_patch", "delete_file"]
+        tier3_details: Dict[str, Any] = {"is_sacred": is_sacred, "model_invoked": False}
+        if const_brain:
+            g_probe = ["sacred_site_aboriginal_core", "action_repo_write_checked"] if (is_sacred and is_write_op) else ["boundary_containment_active", "ancestral_law_honored"]
+            inf3 = const_brain.infer_conformal(g_probe, alpha=0.05)
+            tier3_details.update({
+                "model_invoked": True,
+                "predicted_token": inf3.get("predicted_token"),
+                "prediction_set": inf3.get("prediction_set", []),
+                "abstained": inf3.get("abstained"),
+            })
+        if is_sacred and is_write_op:
             const_passed = False
             const_decision = "verdict_block"
             const_conf = 0.99
@@ -171,7 +206,7 @@ class CascadeEnsembleRouter:
             decision=const_decision,
             confidence=const_conf,
             passed=const_passed,
-            details={"is_sacred": is_sacred},
+            details=tier3_details,
         ))
 
         # --- Tier 4: Speculative Suki Failure Check (Layer 1 Shell & Diff Parsers) ---
@@ -191,6 +226,12 @@ class CascadeEnsembleRouter:
                 reasons.append(
                     f"Structural shell parser blocked destructive command ({', '.join(shell_res['findings'])})"
                 )
+            elif cmd and not shell_res.get("allowlisted", False):
+                suki_conf = 0.65
+                suki_class = "suki_unrecognized_shell_escalate"
+                reasons.append(
+                    f"Unrecognized shell command requires confirmation ({shell_res.get('unrecognized_commands')})"
+                )
 
         diff_payload = tool_args.get("diff") or tool_args.get("payload_diff")
         if suki_passed and diff_payload:
@@ -201,6 +242,29 @@ class CascadeEnsembleRouter:
                 reasons.append(
                     f"Structural AST parser blocked unsafe patch ({', '.join(diff_res['findings'])})"
                 )
+            elif diff_res.get("interface_hazards"):
+                suki_passed = False
+                suki_class = "suki_class_interface_hazard"
+                reasons.append(
+                    f"AST interface diff detected breaking change ({', '.join(diff_res['interface_hazards'])})"
+                )
+            elif diff_res.get("line_count", 0) > 480:
+                suki_conf = 0.60
+                suki_class = "suki_high_blast_radius"
+                reasons.append(
+                    f"Diff exceeds safe blast-radius line threshold ({diff_res['line_count']} > 480 lines)"
+                )
+
+        tier4_details: Dict[str, Any] = {"model_invoked": False}
+        if suki_brain:
+            s_probe = ["suki_class_boundary", "failure_fatal_circuit_breaker"] if not suki_passed else ["failure_severity_benign", "action_inspect_stack_trace"]
+            inf4 = suki_brain.infer_conformal(s_probe, alpha=0.05)
+            tier4_details = {
+                "model_invoked": True,
+                "predicted_token": inf4.get("predicted_token"),
+                "prediction_set": inf4.get("prediction_set", []),
+                "abstained": inf4.get("abstained"),
+            }
 
         cum_conf *= suki_conf
         tiers.append(CascadeTierResult(
@@ -209,6 +273,7 @@ class CascadeEnsembleRouter:
             decision=suki_class,
             confidence=suki_conf,
             passed=suki_passed,
+            details=tier4_details,
         ))
 
         # Proposal 3: Bottleneck Reliability (Weakest-Link Analysis)

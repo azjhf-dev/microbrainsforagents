@@ -238,8 +238,8 @@
   "coverage_std_error": 0.0445,
   "conformal_guarantee_valid": true,
   "conformal_basis": "held_out",
-  "weights_sha256": "73caf2623927d9ae6ac10f2c0a904bc355b2a66e7f68c477fcf054a8c130225c",
+  "weights_sha256": "53662d48eb9e9fb87da5b7d1585bda5af6839db5d03d7aa553cb141b512a680f",
   "hopfield_rules_count": 60,
   "induction_heads": [],
-  "updated_at": 1794968127.2871652
+  "updated_at": 1794969606.2437067
 }

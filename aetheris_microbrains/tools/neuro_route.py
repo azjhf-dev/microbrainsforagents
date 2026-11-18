@@ -146,7 +146,10 @@ def main(
         
         # Proposal 7: Top-3 consensus with min_agreement threshold (default 0.70)
         moe_res = MicroMoEOrchestrator.get_instance().route_query(route_tokens, top_k=3)
-        dispatch_plan = moe_res.get("dispatch_plan", [])
+        dispatch_plan = moe_res.get("dispatch_plan") or [
+            {"expert": d.get("expert_name") or d.get("expert"), "score": d.get("routing_prob", 0.0)}
+            for d in moe_res.get("all_dispatches", [])
+        ]
         if not dispatch_plan and "chosen_expert" in moe_res:
             dispatch_plan = [{"expert": moe_res["chosen_expert"], "score": moe_res.get("routing_confidence", 1.0)}]
 
@@ -161,10 +164,13 @@ def main(
                 continue
             dom = exp_name.replace("neuro_", "")
             try:
-                inf = nursery.infer(dom, route_tokens)
-                pred = inf.get("predicted_token")
+                inf = nursery.infer_brain_conformal(dom, route_tokens)
+                token_cov = float(inf.get("token_coverage", 1.0))
+                if token_cov <= 0.0 or inf.get("reason") == "ood_coverage_breach":
+                    continue
+                pred = inf.get("predicted_token") or inf.get("top_candidate")
                 conf = inf.get("confidence", 0.5)
-                if pred and pred not in ("<pad>", "<unk>", "<eos>"):
+                if pred and pred not in ("<pad>", "<unk>", "<eos>", "<abstain>"):
                     predictions.append(pred)
                     confidences.append(float(conf))
                     experts_consulted.append(dom)

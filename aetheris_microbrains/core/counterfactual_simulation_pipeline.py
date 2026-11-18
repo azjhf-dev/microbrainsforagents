@@ -69,7 +69,13 @@ class CounterfactualSimulationPipeline:
             payload_diff=diff_text,
         )
 
-        if consensus.abstention_triggered:
+        # Defer early only when abstention is due to missing models/uncertainty or non-blast disagreement;
+        # when `patch_quality_predictor` alone raised a blast/interface flag, run full 3-step rollout.
+        deny_names = {v.estimator_name for v in consensus.votes if v.verdict == "DENY"}
+        abstain_names = {v.estimator_name for v in consensus.votes if v.verdict == "ABSTAIN"}
+        only_patch_blast_deny = (deny_names == {"patch_quality_predictor"} and not abstain_names)
+
+        if consensus.abstention_triggered and not only_patch_blast_deny:
             return SimulationOutcome(
                 allowed=False,
                 status="ABSTAIN_ESCALATE_LLM",

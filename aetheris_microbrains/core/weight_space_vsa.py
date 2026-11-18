@@ -54,6 +54,7 @@ class WeightSpaceVSA:
         self.dim = dimension
         self.rng = np.random.default_rng(seed)
         self.domain_codebook: Dict[str, np.ndarray] = {}
+        self.domain_weight_vectors: Dict[str, np.ndarray] = {}
         self.memory_bundle = np.zeros(self.dim, dtype=np.float32)
         self.stored_domains: List[str] = []
 
@@ -102,6 +103,7 @@ class WeightSpaceVSA:
         """Bind domain vector with projected weight vector and superimpose into fleet memory."""
         dom_vec = self._get_or_create_domain_vector(domain)
         w_vec = self.project_weights(weights_dict)
+        self.domain_weight_vectors[domain] = w_vec.copy()
 
         # Hadamard binding: dom (*) w
         bound_representation = dom_vec * w_vec
@@ -137,60 +139,102 @@ class WeightSpaceVSA:
             dimensions=self.dim,
         )
 
+    def _get_weight_vector_for_domain(self, domain: str) -> Optional[np.ndarray]:
+        """Return stored weight-projection vector or unbind from holographic memory_bundle."""
+        if domain in self.domain_weight_vectors:
+            return self.domain_weight_vectors[domain]
+        dom_code = self.domain_codebook.get(domain)
+        if dom_code is not None and float(np.linalg.norm(self.memory_bundle)) > 1e-8:
+            unbound = self.memory_bundle * dom_code
+            norm = float(np.linalg.norm(unbound))
+            return (unbound / norm).astype(np.float32) if norm > 1e-8 else unbound
+        return None
+
     def find_nearest_domains(self, domain: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Find the top-k most similar domains in weight space using holographic codebook vectors."""
+        """Find the top-k most similar domains by actual projected weight-space cosine similarity."""
         clean_d = domain if domain.startswith("neuro_") else f"neuro_{domain}"
-        raw_d = domain.replace("neuro_", "")
-        target_vec = self.domain_codebook.get(clean_d)
-        if target_vec is None:
-            target_vec = self.domain_codebook.get(raw_d)
-        if target_vec is None:
+        raw_d = domain[len("neuro_"):] if domain.startswith("neuro_") else domain
+        skip_names = {domain, clean_d, raw_d}
+
+        target_w = None
+        for cand in (domain, clean_d, raw_d):
+            target_w = self._get_weight_vector_for_domain(cand)
+            if target_w is not None:
+                break
+        if target_w is None:
             return []
+
+        candidate_keys = list(dict.fromkeys(list(self.domain_weight_vectors.keys()) + list(self.domain_codebook.keys())))
         scores = []
-        for other_dom, other_vec in self.domain_codebook.items():
-            if other_dom in (clean_d, raw_d):
+        t_norm = float(np.linalg.norm(target_w)) + 1e-8
+        for other_dom in candidate_keys:
+            if other_dom in skip_names:
                 continue
-            sim = float(np.dot(target_vec, other_vec) / (np.linalg.norm(target_vec) * np.linalg.norm(other_vec) + 1e-8))
+            other_w = self._get_weight_vector_for_domain(other_dom)
+            if other_w is None:
+                continue
+            sim = float(np.dot(target_w, other_w) / (t_norm * float(np.linalg.norm(other_w)) + 1e-8))
             scores.append({"domain": other_dom, "similarity": round(sim, 4)})
         scores.sort(key=lambda x: x["similarity"], reverse=True)
         return scores[:top_k]
 
     def save(self, filepath: Optional[Path] = None) -> Path:
-        """Serialize VSA memory bundle and domain codebook."""
+        """Serialize VSA memory bundle, domain codebook, and projected weight vectors without pickle."""
         if filepath is None:
             filepath = _get_default_vsa_path()
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         codebook_keys = list(self.domain_codebook.keys())
-        codebook_values = np.array([self.domain_codebook[k] for k in codebook_keys], dtype=np.float32)
+        weight_keys = list(self.domain_weight_vectors.keys())
+        max_len = max(
+            [16]
+            + [len(str(k)) for k in codebook_keys]
+            + [len(str(k)) for k in weight_keys]
+            + [len(str(k)) for k in self.stored_domains]
+        )
+        str_dtype = f"<U{max_len}"
+
+        codebook_values = (
+            np.array([self.domain_codebook[k] for k in codebook_keys], dtype=np.float32)
+            if codebook_keys
+            else np.zeros((0, self.dim), dtype=np.float32)
+        )
+        weight_values = (
+            np.array([self.domain_weight_vectors[k] for k in weight_keys], dtype=np.float32)
+            if weight_keys
+            else np.zeros((0, self.dim), dtype=np.float32)
+        )
 
         np.savez_compressed(
             filepath,
             memory_bundle=self.memory_bundle,
-            codebook_keys=np.array(codebook_keys),
+            codebook_keys=np.array(codebook_keys, dtype=str_dtype),
             codebook_values=codebook_values,
-            stored_domains=np.array(self.stored_domains),
-            dim=np.array([self.dim]),
+            weight_keys=np.array(weight_keys, dtype=str_dtype),
+            weight_values=weight_values,
+            stored_domains=np.array(self.stored_domains, dtype=str_dtype),
+            dim=np.array([self.dim], dtype=np.int64),
         )
         return filepath
 
     @classmethod
     def load(cls, filepath: Optional[Path] = None) -> WeightSpaceVSA:
-        """Load VSA associative memory from file."""
+        """Load VSA associative memory from file safely (`allow_pickle=False`)."""
         if filepath is None:
             filepath = _get_default_vsa_path()
         if not filepath.exists():
             return cls()
 
-        data = np.load(filepath, allow_pickle=True)
-        vsa = cls(dimension=int(data["dim"][0]))
-        vsa.memory_bundle = data["memory_bundle"]
-        vsa.stored_domains = list(data["stored_domains"])
+        with np.load(filepath, allow_pickle=False) as data:
+            vsa = cls(dimension=int(data["dim"][0]))
+            vsa.memory_bundle = data["memory_bundle"]
+            vsa.stored_domains = [str(x) for x in data["stored_domains"]]
 
-        keys = list(data["codebook_keys"])
-        values = data["codebook_values"]
-        for k, v in zip(keys, values):
-            vsa.domain_codebook[str(k)] = v
+            for k, v in zip(data["codebook_keys"], data["codebook_values"]):
+                vsa.domain_codebook[str(k)] = v
+            if "weight_keys" in data and "weight_values" in data:
+                for k, v in zip(data["weight_keys"], data["weight_values"]):
+                    vsa.domain_weight_vectors[str(k)] = v
         return vsa
 
 

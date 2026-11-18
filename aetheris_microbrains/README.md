@@ -2,7 +2,7 @@
 
 Standalone, portable suite of pure-NumPy analytical microbrains, a 4-layer structural AST/`shlex` pre-filter (`layered_decision_engine.py`), deterministic SHA-256 MoE tool routing, and held-out split-conformal abstention gates.
 
-> **Architectural Honesty Note:** Microbrains are **not** SGD-trained deep LLMs. They combine **Layer 0 deterministic policy & risk classes**, **Layer 1 Python AST & `shlex` shell parsers**, **Layer 2 analytically compiled Hopfield/Attention matrices with SHA-256 embeddings and split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$ for $1 - \alpha = 95\%$ coverage), and **Layer 3 escalation** to a remote LLM or human confirmation when OOD or ambiguous (`|C_alpha| != 1`).
+> **Architectural Honesty Note (`v0.6.0`):** Microbrains are **not** SGD-trained deep LLMs. They are a **fast (`< 2 ms` p95 on CPU), deterministic 4-layer hybrid pre-flight safety & tool-routing library** built in pure NumPy combining **Layer 0 deterministic policy & risk classes**, **Layer 1 real Python AST, hardcoded secret-leak, and `shlex` shell parsers**, **Layer 2 analytically compiled Kuramoto-Hopfield / Attention matrices with SHA-256 embeddings and split-conformal calibration** ($n_{\text{cal}} = 22 \ge 19$ for $1 - \alpha = 95\%$ coverage, dynamic caller `alpha`, persistent `W_embed_anchor`, and pickle-safe Count-Sketch VSA), and **Layer 3 honest escalation** to an external `llm_callback` or `ESCALATED_TO_LLM` (never silently authorizing abstained actions when no LLM was called).
 
 ## Directory Structure
 
@@ -19,19 +19,19 @@ Standalone, portable suite of pure-NumPy analytical microbrains, a 4-layer struc
     - `metacognitive_calibrator.py`: Split-conformal action set coverage and epistemic/aleatoric uncertainty calibration.
     - `skill_lifecycle_manager.py`: Autonomous domain incubation, validation, degraded status, and fleet hygiene.
   - **SOTA Neural Extensions**:
-    - `weight_space_vsa.py`: 2048-D Vector Symbolic Architecture / Hyperdimensional Computing associative memory over fleet model weights.
+    - `weight_space_vsa.py`: 2048-D Vector Symbolic Architecture / Hyperdimensional Computing associative memory over fleet model weights (`find_nearest_domains` ranks by actual Count-Sketch projected weights; `allow_pickle=False`).
     - `tool_routing_moe.py`: Bilingual (RU/EN) SHA-256 Top-2 Mixture of Experts (MoE) router constrained to active `available_tools` plus MCP-Zero Top-$K$ narrowing (`narrow_tool_surface`) and OOD abstention.
-    - `critical_ensemble_abstention.py`: Multi-brain consensus voting integrated with Layer 0/1 AST & path checks and selective conformal abstention.
-    - `cascade_ensemble.py`: Four-tier cascading decision pipeline routed through Layer 0/1 structural AST/`shlex` checks (`ls`/`pwd` pass without false blocks).
-    - `continual_learning_pipeline.py`: Staged candidate-gate EWC plasticity (`_candidates/` $\to$ `verify_and_promote_candidate` $\to$ `_rollback/` rollback).
+    - `critical_ensemble_abstention.py`: Multi-brain consensus voting integrated with Layer 0/1 AST, secret-leak (`secret_leak_pattern_found`), interface-hazard & path checks, selective conformal abstention, and honest `evaluate_with_cascade(..., llm_callback=None)`.
+    - `cascade_ensemble.py`: Four-tier cascading decision pipeline executing `.infer_conformal()` across tier brains alongside Layer 0/1 structural AST/`shlex` checks (`ls`/`pwd` pass; unrecognized shell cmds & massive diffs escalate).
+    - `continual_learning_pipeline.py`: Empirical diagonal Fisher EWC plasticity anchored to persisted `W_embed_anchor`, `_candidates/` staging, leak-free holdout verification using strict set coverage $P(Y \in C_\alpha(X))$, and `_rollback/` rollback.
     - `plasticity_cycle.py`: Automated scheduled plasticity candidate staging with measured rule-retention telemetry.
     - `microbrain_telemetry.py`: Nanosecond-precision inference telemetry with 10MB log rotation, ECE calculation, and health dashboard export.
     - `counterfactual_simulation_pipeline.py`: Pre-commit blast-radius gate backed by Layer 1 Python AST & hunk analysis.
 - `evolution/` — Weight-Space Programming (WSP) & client modules (13 modules + `__init__.py`):
   - `wsp_engine.py`, `wsp_substrate.py`, `wsp_lenses.py`, `wsp_sae.py`, `wsp_merger.py`, `wsp_hebbian.py`, `wsp_sleep_consolidation.py`, `wsp_liquid_router.py`, `wsp_ab_probe.py`, `wsp_epistemic_oracle.py`, `wsp_sandbox_tracer.py`, `dsh_microbrain_client.py`, `opencl_microbrain_accelerator.py` (compatibility shim)
 - `tools/` — Agent tool wrappers (`microbrain.py`, `microbrain_lab.py`, `neuro_brain_incubator.py`, `neuro_route.py`, `wsp_tensor_surgeon.py`, `conformal_collector.py`)
-- `memory/` — Fleet registries (`fleet_lifecycle_registry.json`), weight space VSA store (`store/weight_space_vsa.npz`), analytically compiled & SHA-256 verified `store/neuro_brains/` fleet (87 files), and `opencl_crossover.json`
-- `tests/` — Verification suites (15 `test_*.py` suites + `conftest.py`), including `test_layer_ablation_and_baselines.py`, `test_reviewer_probe_suite.py`, `test_adversarial_safety_suite.py`, `test_colony_swe_shadow.py`, and `test_ouroboros_sota_extensions.py`
+- `memory/` — Fleet registries (`fleet_lifecycle_registry.json`), pickle-safe projected weight-space VSA store (`store/weight_space_vsa.npz`), and analytically compiled, `W_embed_anchor`-pinned & SHA-256 verified `store/neuro_brains/` fleet (42 models / 86 files), plus `opencl_crossover.json`
+- `tests/` — Verification suites (17 `test_*.py` suites + `conftest.py`; 170 passed, 5 OpenCL GPU skipped on CPU host), including `test_fable_review_fixes.py`, `test_end_to_end_economics_and_drift.py`, `test_layer_ablation_and_baselines.py`, `test_reviewer_probe_suite.py`, `test_adversarial_safety_suite.py`, `test_colony_swe_shadow.py`, and `test_ouroboros_sota_extensions.py`
 
 ## Exported SDK Symbols
 
@@ -151,6 +151,6 @@ print(dash.sliding_window_coverage, dash.drift_detected, q_next)
 ### 6. Running Tests & the FastAPI Microbrain Server
 
 ```bash
-pytest aetheris_microbrains/tests/test_end_to_end_economics_and_drift.py aetheris_microbrains/tests/test_layer_ablation_and_baselines.py aetheris_microbrains/tests/test_reviewer_probe_suite.py -v
+pytest aetheris_microbrains/tests -q
 python -m aetheris_microbrains.core.microbrain_server
 ```
